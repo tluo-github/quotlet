@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-// 登录后把额度、会话、每日 token 上报到 Quotabar Cloud（docs/cloud-design.md 第 5 节）。
+// 登录后把额度、会话、每日 token 上报到 Quotlet Cloud（docs/cloud-design.md 第 5 节）。
 //
 // - 只发有变化的：记住每样东西上次成功发出去的“签名”，签名没变就不发
 // - 发失败不更新签名，下一轮（Store 每分钟扫描一次）自动重试

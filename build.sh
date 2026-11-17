@@ -1,18 +1,19 @@
 #!/bin/bash
 # Usage / 用法:
-#   ./build.sh            build build/Quotabar.app (this Mac's architecture)
+#   ./build.sh            build build/Quotlet.app (this Mac's architecture)
 #   ./build.sh install    build, copy to /Applications and launch
-#   ./build.sh release    universal (Apple silicon + Intel) build: dist/Quotabar-<version>.zip and .dmg
+#   ./build.sh release    universal (Apple silicon + Intel) build: dist/Quotlet-<version>.zip and .dmg
 #
 # Signing for release:
 #   If a "Developer ID Application" certificate is in your keychain, the release is signed with it
 #   (hardened runtime), notarized with the notarytool profile in $NOTARY_PROFILE (default
 #   "quotabar-notary") and stapled. Otherwise the app is ad-hoc signed and macOS warns on first launch.
 #   One-time setup:  xcrun notarytool store-credentials quotabar-notary --team-id <TEAM_ID>
+#   (the profile keeps its pre-rename name "quotabar-notary"; it is only a keychain label)
 set -euo pipefail
 cd "$(dirname "$0")"
 
-APP_NAME="Quotabar"
+APP_NAME="Quotlet"
 APP="build/$APP_NAME.app"
 VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Resources/Info.plist)
 NOTARY_PROFILE="${NOTARY_PROFILE:-quotabar-notary}"
@@ -50,8 +51,8 @@ fi
 notarize() {   # notarize <file>   (retries: the upload sometimes times out on slow networks)
     for attempt in 1 2 3; do
         echo "Notarizing $1 (attempt $attempt, usually takes a few minutes) ..."
-        if xcrun notarytool submit "$1" --keychain-profile "$NOTARY_PROFILE" --wait --timeout 20m 2>&1 | tee /tmp/quotabar-notary.log \
-            && grep -q "status: Accepted" /tmp/quotabar-notary.log; then
+        if xcrun notarytool submit "$1" --keychain-profile "$NOTARY_PROFILE" --wait --timeout 20m 2>&1 | tee /tmp/quotlet-notary.log \
+            && grep -q "status: Accepted" /tmp/quotlet-notary.log; then
             return 0
         fi
         sleep 10
@@ -84,7 +85,7 @@ case "${1:-}" in
         fi
         ditto -c -k --keepParent "$APP" "$ZIP"
 
-        # DMG: Quotabar.app + a shortcut to /Applications, so users drag to install.
+        # DMG: Quotlet.app + a shortcut to /Applications, so users drag to install.
         STAGE=$(mktemp -d)
         cp -R "$APP" "$STAGE/"
         ln -s /Applications "$STAGE/Applications"

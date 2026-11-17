@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 开发用：`Quotabar --snapshot <目录>` 会在屏幕外渲染各个页面（浅色 + 深色）存成 PNG，然后退出。
+/// 开发用：`Quotlet --snapshot <目录>` 会在屏幕外渲染各个页面（浅色 + 深色）存成 PNG，然后退出。
 /// 用来检查界面效果，不用真的去点状态栏。
 enum Snapshot {
     static var directory: String? {

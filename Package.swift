@@ -2,9 +2,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "Quotabar",
+    name: "Quotlet",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "Quotabar", path: "Sources/Quotabar")
+        .executableTarget(name: "Quotlet", path: "Sources/Quotlet")
     ]
 )

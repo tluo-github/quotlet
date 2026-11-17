@@ -119,8 +119,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         requestAuthorization { ok in
             if ok {
                 self.post(id: "test-\(Date().timeIntervalSince1970)",
-                          title: L("Quotabar 通知已开启", "Quotabar notifications are on",
-                                   ja: "Quotabar の通知はオンです", ko: "Quotabar 알림이 켜져 있습니다"),
+                          title: L("Quotlet 通知已开启", "Quotlet notifications are on",
+                                   ja: "Quotlet の通知はオンです", ko: "Quotlet 알림이 켜져 있습니다"),
                           body: L("额度快到上限、用完和恢复时，会在这里提醒你。",
                                   "You'll be notified here when a limit is near, reached, or available again.",
                                   ja: "上限が近いとき、上限に達したとき、リセットされたときにお知らせします。",

@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct QuotabarApp: App {
+struct QuotletApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = Store()
 
@@ -24,7 +24,7 @@ struct QuotabarApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// 浏览器登录完成后打开 quotabar://auth?...
+    /// 浏览器登录完成后打开 quotlet://auth?...
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls { MainActor.assumeIsolated { Cloud.shared.handleCallback(url) } }
     }

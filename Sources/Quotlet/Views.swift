@@ -141,7 +141,7 @@ struct AccountButton: View {
             // 不加 fixedSize：空间不够时名字可以被压缩、显示省略号，不会把顶部撑出面板
             Button { showCard.toggle() } label: { signedInLabel(user) }
                 .buttonStyle(.plain)
-                .help(user.email ?? "Quotabar Cloud")
+                .help(user.email ?? "Quotlet Cloud")
                 .popover(isPresented: $showCard, arrowEdge: .bottom) { accountCard(user) }
         } else {
             Button { cloud.signIn() } label: {
@@ -159,10 +159,10 @@ struct AccountButton: View {
             .buttonStyle(.plain)
             .onHover { hovering = $0 }
             .fixedSize()
-            .help(L("登录 Quotabar Cloud，在网站和手机上查看额度和会话",
-                    "Sign in to Quotabar Cloud to see usage and sessions on the web and your phone",
-                    ja: "Quotabar Cloud にログインして、Web やスマートフォンで使用量とセッションを確認",
-                    ko: "Quotabar Cloud에 로그인해 웹과 휴대폰에서 사용량과 세션 보기"))
+            .help(L("登录 Quotlet Cloud，在网站和手机上查看额度和会话",
+                    "Sign in to Quotlet Cloud to see usage and sessions on the web and your phone",
+                    ja: "Quotlet Cloud にログインして、Web やスマートフォンで使用量とセッションを確認",
+                    ko: "Quotlet Cloud에 로그인해 웹과 휴대폰에서 사용량과 세션 보기"))
         }
     }
 
@@ -920,7 +920,7 @@ struct SettingsView: View {
             ChipButton(title: L("去开启通知", "Allow notifications", ja: "通知を許可", ko: "알림 허용")) {
                 NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension")!)
             }
-            .help(L("通知被关闭，请在系统设置 → 通知里允许 Quotabar", "Notifications are off. Allow Quotabar in System Settings → Notifications.", ja: "通知がオフです。システム設定 → 通知 で Quotabar を許可してください。", ko: "알림이 꺼져 있습니다. 시스템 설정 → 알림에서 Quotabar를 허용하세요."))
+            .help(L("通知被关闭，请在系统设置 → 通知里允许 Quotlet", "Notifications are off. Allow Quotlet in System Settings → Notifications.", ja: "通知がオフです。システム設定 → 通知 で Quotlet を許可してください。", ko: "알림이 꺼져 있습니다. 시스템 설정 → 알림에서 Quotlet를 허용하세요."))
         case .none:
             ChipButton(title: L("发送测试", "Send test", ja: "テスト送信", ko: "테스트 보내기")) { store.sendTestNotification() }
         }
@@ -934,11 +934,11 @@ struct SettingsView: View {
                 .frame(width: 32, height: 32)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("Quotabar").font(.system(size: 13, weight: .semibold))
+                    Text("Quotlet").font(.system(size: 13, weight: .semibold))
                     Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L("开发版", "dev", ja: "開発版", ko: "개발 버전"))
                         .font(Theme.caption).foregroundStyle(Theme.text2)
                 }
-                Link(destination: URL(string: "https://github.com/tluo-github/quotabar")!) {
+                Link(destination: URL(string: "https://github.com/tluo-github/quotlet")!) {
                     HStack(spacing: 3) {
                         Text("GitHub")
                         Image(systemName: "arrow.up.right").font(.system(size: 8, weight: .semibold))

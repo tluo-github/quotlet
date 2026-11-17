@@ -3,20 +3,21 @@ import CryptoKit
 import Foundation
 import Security
 
-// Quotabar Cloud：登录 app.quotabar.workers.dev，以后用来上报额度和会话。
+// Quotlet Cloud：登录 app.quotlet.com，以后用来上报额度和会话。
 // 默认关闭；没登录时不发任何请求。
 //
 // 登录流程：在默认浏览器里打开 /login?client=mac，用户用 GitHub 登录后网页跳到
-// quotabar://auth?code=…（Info.plist 注册了这个 scheme），再用 code + PKCE verifier 换设备 token。
+// quotlet://auth?code=…（Info.plist 注册了这个 scheme），再用 code + PKCE verifier 换设备 token。
 // token 存在钥匙串里，不放 UserDefaults。
 
 enum CloudConfig {
     /// 开发时可以用 `defaults write app.quotabar cloudBaseURL http://localhost:8787` 指向本地 wrangler dev
     static var base: URL {
         if let s = UserDefaults.standard.string(forKey: "cloudBaseURL"), let u = URL(string: s) { return u }
-        return URL(string: "https://app.quotabar.workers.dev")!
+        return URL(string: "https://app.quotlet.com")!
     }
-    static let callbackScheme = "quotabar"
+    /// quotlet:// 是新的；quotabar:// 是改名前的，过渡期两个都认
+    static let callbackSchemes: Set<String> = ["quotlet", "quotabar"]
 }
 
 struct CloudUser: Codable, Equatable {
@@ -55,7 +56,7 @@ final class Cloud: ObservableObject {
     /// 设备 token 缓存在内存里：上报每分钟都要用，不能每次都读钥匙串
     private(set) var token: String?
 
-    /// 正在浏览器里登录：等 quotabar://auth 回调。只存在内存里，app 重启就作废，重新点登录即可。
+    /// 正在浏览器里登录：等 quotlet://auth 回调。只存在内存里，app 重启就作废，重新点登录即可。
     private var pending: (state: String, verifier: String, started: Date)?
     private static let userKey = "cloudUser"
 
@@ -88,9 +89,9 @@ final class Cloud: ObservableObject {
 
     // MARK: 登录
 
-    /// 在默认浏览器里新开标签页登录。登录完网页跳到 quotabar://auth?code=…&state=…，
+    /// 在默认浏览器里新开标签页登录。登录完网页跳到 quotlet://auth?code=…&state=…，
     /// 系统把这个链接交给 AppDelegate → handleCallback。
-    /// 别的 app 就算抢注了 quotabar:// 拿到 code 也没用：换 token 还要只在这里的 PKCE verifier。
+    /// 别的 app 就算抢注了 quotlet:// 拿到 code 也没用：换 token 还要只在这里的 PKCE verifier。
     func signIn() {
         guard !isBusy else { return }
         errorMessage = nil
@@ -106,9 +107,9 @@ final class Cloud: ObservableObject {
         NSWorkspace.shared.open(comps.url!)
     }
 
-    /// 浏览器打开 quotabar://auth?... 时调用
+    /// 浏览器打开 quotlet://auth?... 时调用
     func handleCallback(_ url: URL) {
-        guard url.scheme == CloudConfig.callbackScheme, url.host == "auth" else { return }
+        guard let scheme = url.scheme, CloudConfig.callbackSchemes.contains(scheme), url.host == "auth" else { return }
         let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
         let code = items.first(where: { $0.name == "code" })?.value
         let state = items.first(where: { $0.name == "state" })?.value
@@ -145,11 +146,11 @@ final class Cloud: ObservableObject {
             }
             self.token = token
             setUser(u)
-            Notifier.shared.notify(title: L("已登录 Quotabar Cloud", "Signed in to Quotabar Cloud", ja: "Quotabar Cloud にログインしました", ko: "Quotabar Cloud에 로그인했습니다"),
+            Notifier.shared.notify(title: L("已登录 Quotlet Cloud", "Signed in to Quotlet Cloud", ja: "Quotlet Cloud にログインしました", ko: "Quotlet Cloud에 로그인했습니다"),
                                    body: [u.name, u.email].compactMap { $0 }.joined(separator: " · "))
         } catch {
             errorMessage = error.localizedDescription
-            Notifier.shared.notify(title: L("Quotabar 登录失败", "Quotabar sign-in failed", ja: "Quotabar のログインに失敗しました", ko: "Quotabar 로그인 실패"),
+            Notifier.shared.notify(title: L("Quotlet 登录失败", "Quotlet sign-in failed", ja: "Quotlet のログインに失敗しました", ko: "Quotlet 로그인 실패"),
                                    body: error.localizedDescription)
         }
     }
@@ -212,7 +213,7 @@ final class Cloud: ObservableObject {
 
     /// 和额度请求一样：开了代理先走代理，失败再直连（国内访问 workers.dev 需要代理）。
     /// 整轮都失败时再重试一次。每次失败都写进系统日志：
-    /// `log show --last 10m --predicate 'process == "Quotabar" AND eventMessage CONTAINS "[cloud]"'`
+    /// `log show --last 10m --predicate 'process == "Quotlet" AND eventMessage CONTAINS "[cloud]"'`
     nonisolated static func request(_ method: String, _ path: String, json: [String: Any]? = nil, token: String?) async throws -> (Data, Int) {
         var req = URLRequest(url: CloudConfig.base.appendingPathComponent(path))
         req.httpMethod = method
@@ -265,9 +266,9 @@ final class Cloud: ObservableObject {
 
 // MARK: - 钥匙串
 
-/// Quotabar 自己的钥匙串条目（和 Claude Code 的凭证无关）
+/// Quotlet 自己的钥匙串条目（和 Claude Code 的凭证无关）
 enum CloudToken {
-    private static let service = "Quotabar Cloud"
+    private static let service = "Quotabar Cloud"   // 改名前的名字，保留不改：改了已登录的用户要重新登录
     private static let account = "device-token"
 
     private static var query: [String: Any] {

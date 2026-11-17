@@ -6,12 +6,12 @@
 # 界面布局改了以后，下面每种语言的点击坐标（点，面板左上为原点）可能要跟着调。
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# 正在运行的 Quotabar 和截图共用同一份设置（当前标签页等），先退出，结束后再打开
-WAS_RUNNING=0; pgrep -x Quotabar >/dev/null && WAS_RUNNING=1 && pkill -x Quotabar || true
+# 正在运行的 Quotlet 和截图共用同一份设置（当前标签页等），先退出，结束后再打开
+WAS_RUNNING=0; pgrep -x Quotlet >/dev/null && WAS_RUNNING=1 && pkill -x Quotlet || true
 ./build.sh >/dev/null
 TMP=$(mktemp -d)
 swiftc -O scripts/make-demo.swift -o "$TMP/make-demo" 2>/dev/null
-BIN=build/Quotabar.app/Contents/MacOS/Quotabar
+BIN=build/Quotlet.app/Contents/MacOS/Quotlet
 
 # 语言  用量tab x  会话tab x  统计tab x  深色按钮 x
 LANGS="zh 66 108 150 345
@@ -34,4 +34,4 @@ while read -r l tu ts tt dx; do
     echo "done: $l"
 done <<< "$LANGS"
 rm -rf "$TMP"
-[[ $WAS_RUNNING == 1 ]] && open -a Quotabar || true
+[[ $WAS_RUNNING == 1 ]] && open -a Quotlet || true

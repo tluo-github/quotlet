@@ -5,9 +5,9 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Quotabar</string>
+	<string>Quotlet</string>
 	<key>CFBundleExecutable</key>
-	<string>Quotabar</string>
+	<string>Quotlet</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
@@ -18,7 +18,7 @@
 		<string>zh-Hans</string>
 	</array>
 	<key>CFBundleName</key>
-	<string>Quotabar</string>
+	<string>Quotlet</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -30,6 +30,7 @@
 			<string>app.quotabar.auth</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>quotlet</string>
 				<string>quotabar</string>
 			</array>
 		</dict>
