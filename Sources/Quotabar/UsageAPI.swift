@@ -9,6 +9,8 @@ struct LimitItem: Identifiable {
     let percent: Double
     let severity: String?
     let resetsAt: Date?
+    /// weekly_scoped 的范围名（Opus / Sonnet …），上报给网站自己拼标题
+    var scope: String? = nil
 }
 
 struct BreakdownRow: Identifiable {
@@ -175,7 +177,8 @@ enum UsageAPI {
                     title: title,
                     percent: num(l["percent"]) ?? 0,
                     severity: l["severity"] as? String,
-                    resetsAt: Fmt.parseISO(l["resets_at"] as? String)))
+                    resetsAt: Fmt.parseISO(l["resets_at"] as? String),
+                    scope: scopeName))
             }
         }
         // 老格式兜底
@@ -189,7 +192,8 @@ enum UsageAPI {
             for (key, kind, title) in pairs {
                 guard let w = root[key] as? [String: Any], let u = num(w["utilization"]) else { continue }
                 limits.append(LimitItem(id: key, kind: kind, title: title, percent: u, severity: nil,
-                                        resetsAt: Fmt.parseISO(w["resets_at"] as? String)))
+                                        resetsAt: Fmt.parseISO(w["resets_at"] as? String),
+                                        scope: key.hasSuffix("_opus") ? "Opus" : key.hasSuffix("_sonnet") ? "Sonnet" : nil))
             }
         }
 

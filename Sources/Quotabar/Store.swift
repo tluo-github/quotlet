@@ -110,6 +110,7 @@ final class Store: ObservableObject {
         if let (cached, date) = UsageCache.load() {
             usage = cached
             lastUpdated = date
+            CloudSync.shared.usageUpdated(cached, at: date)
         }
 
         Notifier.shared.setup()
@@ -195,6 +196,7 @@ final class Store: ObservableObject {
                 rateLimited = false
                 needsProxyHint = false
                 Notifier.shared.evaluate(fresh)
+                CloudSync.shared.usageUpdated(fresh, at: Date())
             } catch {
                 errorMessage = error.localizedDescription
                 if case UsageError.http(429) = error { rateLimited = true } else { rateLimited = false }
@@ -214,6 +216,7 @@ final class Store: ObservableObject {
             let snap = await scanner.scan()
             local = Demo.enabled ? Demo.anonymize(snap) : snap
             isScanning = false
+            CloudSync.shared.localUpdated(snap)   // 演示模式下 CloudSync 自己不上报
         }
     }
 

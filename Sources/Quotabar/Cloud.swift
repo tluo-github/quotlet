@@ -49,6 +49,12 @@ final class Cloud: ObservableObject {
 
     var isSignedIn: Bool { user != nil }
 
+    /// 截图 / 录屏模式：不读钥匙串、不联网
+    static let isPreview = CommandLine.arguments.contains("--snapshot") || CommandLine.arguments.contains("--showcase")
+
+    /// 设备 token 缓存在内存里：上报每分钟都要用，不能每次都读钥匙串
+    private(set) var token: String?
+
     /// 正在浏览器里登录：等 quotabar://auth 回调。只存在内存里，app 重启就作废，重新点登录即可。
     private var pending: (state: String, verifier: String, started: Date)?
     private static let userKey = "cloudUser"
@@ -56,15 +62,23 @@ final class Cloud: ObservableObject {
     private init() {
         // 截图 / 演示模式：不读钥匙串（开发版每次重编译都会触发钥匙串授权弹窗），也不露出真实账号。
         // `-cloudPreviewUser 名字` 可以渲染已登录的样子。
-        let args = CommandLine.arguments
-        if args.contains("--snapshot") || args.contains("--showcase") {
+        if Self.isPreview {
             if let name = UserDefaults.standard.string(forKey: "cloudPreviewUser") {
                 user = CloudUser(id: "preview", email: "you@example.com", name: name)
             }
             return
         }
+        // 开发用：`-cloudBaseURL http://localhost:8787 -cloudDevToken <token>` 直接用本地 wrangler dev 里的测试设备，
+        // 不碰钥匙串（只认启动参数，不会存进 UserDefaults）
+        if let dev = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["cloudDevToken"] as? String,
+           UserDefaults.standard.string(forKey: "cloudBaseURL") != nil {
+            token = dev
+            user = CloudUser(id: "dev", email: nil, name: "Dev")
+            return
+        }
         // 先用上次保存的账号信息显示，再去服务器确认 token 还有效（可能在网页上被移除了）
-        if CloudToken.load() != nil,
+        token = CloudToken.load()
+        if token != nil,
            let data = UserDefaults.standard.data(forKey: Self.userKey),
            let u = try? JSONDecoder().decode(CloudUser.self, from: data) {
             user = u
@@ -129,6 +143,7 @@ final class Cloud: ObservableObject {
             guard CloudToken.save(token) else {
                 throw CloudError.keychain
             }
+            self.token = token
             setUser(u)
             Notifier.shared.notify(title: L("已登录 Quotabar Cloud", "Signed in to Quotabar Cloud", ja: "Quotabar Cloud にログインしました", ko: "Quotabar Cloud에 로그인했습니다"),
                                    body: [u.name, u.email].compactMap { $0 }.joined(separator: " · "))
@@ -142,9 +157,8 @@ final class Cloud: ObservableObject {
     // MARK: 退出 / 校验
 
     func signOut() {
-        let token = CloudToken.load()
-        CloudToken.delete()
-        setUser(nil)
+        let token = self.token
+        clearToken()
         errorMessage = nil
         // 通知服务器吊销这台设备；失败也没关系，本地已经删掉 token
         if let token {
@@ -158,11 +172,10 @@ final class Cloud: ObservableObject {
 
     /// token 被网页上移除、或账号被删除时，服务器返回 401，本地也退出
     func refreshMe() async {
-        guard let token = CloudToken.load() else { setUser(nil); return }
+        guard let token else { setUser(nil); return }
         guard let (data, status) = try? await Self.request("GET", "/api/me", token: token) else { return }  // 网络不通：保持现状
         if status == 401 {
-            CloudToken.delete()
-            setUser(nil)
+            handleUnauthorized()
             return
         }
         if status == 200,
@@ -172,6 +185,18 @@ final class Cloud: ObservableObject {
            let u = try? JSONDecoder().decode(CloudUser.self, from: userData) {
             setUser(u)
         }
+    }
+
+    /// 服务器说 token 无效（在网页上被移除、账号被删）：本地也退出
+    func handleUnauthorized() {
+        NSLog("[cloud] token rejected (401), signing out locally")
+        clearToken()
+    }
+
+    private func clearToken() {
+        CloudToken.delete()
+        token = nil
+        setUser(nil)
     }
 
     private func setUser(_ u: CloudUser?) {

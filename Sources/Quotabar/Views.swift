@@ -698,6 +698,8 @@ struct DailyChart: View {
 
 struct SettingsView: View {
     @EnvironmentObject var store: Store
+    @ObservedObject private var cloud = Cloud.shared
+    @ObservedObject private var sync = CloudSync.shared
     let onBack: () -> Void
     @State private var portText = ""
 
@@ -729,6 +731,8 @@ struct SettingsView: View {
                 // 只在分组之间画线，组内各行靠留白区分
                 VStack(alignment: .leading, spacing: 11) {
                     generalGroup
+                    RowDivider()
+                    cloudGroup
                     RowDivider()
                     proxyGroup
                     RowDivider()
@@ -791,6 +795,45 @@ struct SettingsView: View {
                 SwitchToggle(isOn: Binding(get: { store.launchAtLogin }, set: { store.setLaunchAtLogin($0) }))
             }
         }
+    }
+
+    /// 云同步：没登录只有一个登录按钮；登录后是上报开关和“上传会话标题”
+    private var cloudGroup: some View {
+        SettingsGroup(title: L("云同步", "Cloud sync", ja: "クラウド同期", ko: "클라우드 동기화")) {
+            if cloud.isSignedIn {
+                SettingsRow {
+                    SettingsLabel(L("上报额度和会话", "Upload usage & sessions", ja: "使用量とセッションを送信", ko: "사용량과 세션 업로드"),
+                                  icon: "icloud.and.arrow.up", status: syncStatus)
+                    Spacer()
+                    SwitchToggle(isOn: $sync.enabled)
+                }
+                RowGap()
+                SettingsRow {
+                    SettingsLabel(L("上传会话标题", "Upload session titles", ja: "セッション名を送信", ko: "세션 제목 업로드"),
+                                  icon: "text.alignleft",
+                                  detail: L("关掉后只显示项目名", "Off: only project names are shown", ja: "オフ：プロジェクト名だけを表示", ko: "끄면 프로젝트 이름만 표시"))
+                    Spacer()
+                    SwitchToggle(isOn: $sync.uploadTitles)
+                }
+                .disabled(!sync.enabled)
+                .opacity(sync.enabled ? 1 : 0.45)
+            } else {
+                SettingsRow {
+                    SettingsLabel(L("在网站和手机上查看", "View on the web and phone", ja: "Web とスマホで見る", ko: "웹과 휴대폰에서 보기"), icon: "icloud")
+                    Spacer()
+                    ChipButton(title: L("登录", "Sign in", ja: "ログイン", ko: "로그인")) { cloud.signIn() }
+                }
+            }
+        }
+    }
+
+    private var syncStatus: (String, Bool)? {
+        guard sync.enabled else { return nil }
+        if let err = sync.lastError { return (err, false) }
+        if let t = sync.lastSyncAt {
+            return (L("已同步 · \(Fmt.time(t))", "Synced · \(Fmt.time(t))", ja: "同期済み · \(Fmt.time(t))", ko: "동기화됨 · \(Fmt.time(t))"), true)
+        }
+        return nil
     }
 
     private var proxyGroup: some View {
