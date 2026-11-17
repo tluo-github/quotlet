@@ -1,14 +1,16 @@
-<img src="docs/icon.png" width="96" alt="Quotabar icon">
+<img src="docs/icon.png" width="96" alt="Quotlet icon">
 
-# Quotabar
+# Quotlet
 
 **Your Claude plan limits in the macOS menu bar.**
 
 English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
-Quotabar shows the same numbers as `/usage` in Claude Code: how much of your 5-hour session and weekly limits you've used, and when each one resets. Click it for details, your recent Claude Code sessions and token stats.
+> **Quotlet was called Quotabar up to version 0.4.1.** Those releases are still named `Quotabar.app` / `Quotabar-<version>.dmg`. The GitHub repo moved from `tluo-github/quotabar` to `tluo-github/quotlet`; old links redirect.
 
-<a href="docs/demo-en.mp4"><img src="docs/demo-en.gif" width="420" alt="Quotabar demo"></a>
+Quotlet shows the same numbers as `/usage` in Claude Code: how much of your 5-hour session and weekly limits you've used, and when each one resets. Click it for details, your recent Claude Code sessions and token stats.
+
+<a href="docs/demo-en.mp4"><img src="docs/demo-en.gif" width="420" alt="Quotlet demo"></a>
 
 <sub>Click the animation for the MP4 video.</sub>
 
@@ -19,7 +21,7 @@ Quotabar shows the same numbers as `/usage` in Claude Code: how much of your 5-h
   <img src="docs/settings-en.png" width="24%" alt="Settings">
 </p>
 
-> Quotabar is an independent open-source project. It is not made by, affiliated with, or endorsed by Anthropic. "Claude" is a trademark of Anthropic.
+> Quotlet is an independent open-source project. It is not made by, affiliated with, or endorsed by Anthropic. "Claude" is a trademark of Anthropic.
 
 ## Features
 
@@ -40,16 +42,16 @@ Quotabar shows the same numbers as `/usage` in Claude Code: how much of your 5-h
 
 ### Download
 
-Download **Quotabar-<version>.dmg** from [Releases](https://github.com/tluo-github/quotabar/releases/latest), open it and drag **Quotabar** into **Applications**. The app is signed and notarized by Apple, so it opens with a double-click.
+Download **Quotlet-<version>.dmg** from [Releases](https://github.com/tluo-github/quotlet/releases/latest), open it and drag **Quotlet** into **Applications**. The app is signed and notarized by Apple, so it opens with a double-click.
 
 ### Homebrew
 
 ```bash
-brew tap tluo-github/quotabar https://github.com/tluo-github/quotabar
-brew install --cask quotabar
+brew tap tluo-github/quotlet https://github.com/tluo-github/quotlet
+brew install --cask quotlet
 ```
 
-Update with `brew upgrade --cask quotabar`, remove with `brew uninstall --cask quotabar`.
+Update with `brew upgrade --cask quotlet`, remove with `brew uninstall --cask quotlet`.
 
 ### After installing
 
@@ -63,16 +65,16 @@ Update with `brew upgrade --cask quotabar`, remove with `brew uninstall --cask q
 | Limits and reset times | `api.anthropic.com/api/oauth/usage`, the endpoint `/usage` uses |
 | Sessions and tokens | Claude Code's local logs in `~/.claude/projects` |
 
-- Quotabar reads the login Claude Code keeps in your Keychain (`Claude Code-credentials`) with the system `security` tool. It never refreshes or changes that login, and the only network request it makes is that one call to Anthropic.
-- Claude Code logins expire every few hours and Claude Code renews them the next time you use it. If Quotabar says your login expired, send any message in Claude Code. Quotabar retries every minute and keeps showing the last data meanwhile.
+- Quotlet reads the login Claude Code keeps in your Keychain (`Claude Code-credentials`) with the system `security` tool. It never refreshes or changes that login, and the only network request it makes is that one call to Anthropic.
+- Claude Code logins expire every few hours and Claude Code renews them the next time you use it. If Quotlet says your login expired, send any message in Claude Code. Quotlet retries every minute and keeps showing the last data meanwhile.
 - Token stats count each reply once. Claude Code writes the same usage on several log lines per reply; `/stats` appears to count every line, so its totals run about twice as high.
 - Sessions and stats cover this Mac only. Usage on claude.ai, mobile or other computers counts toward your limits but doesn't appear in the session list.
 
-> The usage endpoint isn't publicly documented. If Anthropic changes it, Quotabar may need an update.
+> The usage endpoint isn't publicly documented. If Anthropic changes it, Quotlet may need an update.
 
 ## Refresh and proxy
 
-- Limits refresh every 5 minutes by default (1 to 30 minutes in Settings). Anthropic doesn't publish a rate limit for this endpoint; very frequent refreshes can get rate limited (HTTP 429), and Quotabar then waits 5 minutes before trying again. Sessions and stats read local logs every minute.
+- Limits refresh every 5 minutes by default (1 to 30 minutes in Settings). Anthropic doesn't publish a rate limit for this endpoint; very frequent refreshes can get rate limited (HTTP 429), and Quotlet then waits 5 minutes before trying again. Sessions and stats read local logs every minute.
 - If Anthropic can't be reached, the Usage tab shows a hint with a button to the proxy settings. Turn on **Use HTTP proxy** and enter your proxy's host and port. The proxy is on by default (`127.0.0.1:7890`) when your system language is Chinese or your region is mainland China, Hong Kong or Macau.
 
 ## Build from source
@@ -80,21 +82,21 @@ Update with `brew upgrade --cask quotabar`, remove with `brew uninstall --cask q
 Requires the Xcode Command Line Tools (`xcode-select --install`). No third-party dependencies.
 
 ```bash
-git clone https://github.com/tluo-github/quotabar.git && cd quotabar
-./build.sh            # build/Quotabar.app for this Mac
+git clone https://github.com/tluo-github/quotlet.git && cd quotlet
+./build.sh            # build/Quotlet.app for this Mac
 ./build.sh install    # build, copy to /Applications and launch
-./build.sh release    # universal build: dist/Quotabar-<version>.dmg and .zip
+./build.sh release    # universal build: dist/Quotlet-<version>.dmg and .zip
 ```
 
 Development helpers:
 
 ```bash
 # Render every tab (light and dark) to PNG without touching the menu bar
-.build/release/Quotabar --snapshot /tmp/qb -AppleLanguages '(ja)' -stage YES -demo YES -scale 3
+.build/release/Quotlet --snapshot /tmp/qb -AppleLanguages '(ja)' -stage YES -demo YES -scale 3
 # Regenerate the README screenshots and demo videos for all four languages (needs ffmpeg)
 scripts/make-demo.sh
 # A window with the real panel on a clean background, for recording demos
-.build/release/Quotabar --showcase -demo YES
+.build/release/Quotlet --showcase -demo YES
 # Redraw the app icon
 swift scripts/make-icon.swift
 ```
@@ -113,7 +115,7 @@ swift scripts/make-icon.swift
 | `Format.swift` | Languages, dates, durations, token counts |
 | `Notifier.swift` | Limit notifications |
 | `Snapshot.swift`, `Showcase.swift`, `Demo.swift` | Screenshot, demo-window and sample-data helpers |
-| `Casks/quotabar.rb` | Homebrew cask |
+| `Casks/quotlet.rb` | Homebrew cask |
 
 ## License
 

@@ -1,14 +1,16 @@
-<img src="docs/icon.png" width="96" alt="Quotabar アイコン">
+<img src="docs/icon.png" width="96" alt="Quotlet アイコン">
 
-# Quotabar
+# Quotlet
 
 **Claude プランの使用量を macOS のメニューバーに表示します。**
 
 [English](README.md) | [简体中文](README.zh-CN.md) | 日本語 | [한국어](README.ko.md)
 
-Quotabar は Claude Code の `/usage` と同じ数値を表示します。5 時間のセッション枠と週間上限をどれだけ使ったか、それぞれいつリセットされるかがひと目でわかります。クリックすると詳細、最近の Claude Code セッション、トークン統計を確認できます。
+> **Quotlet は 0.4.1 まで Quotabar という名前でした。** それらのバージョンのファイル名は `Quotabar.app` / `Quotabar-<バージョン>.dmg` のままです。GitHub リポジトリは `tluo-github/quotabar` から `tluo-github/quotlet` に移り、古いリンクは自動で転送されます。
 
-<a href="docs/demo-ja.mp4"><img src="docs/demo-ja.gif" width="420" alt="Quotabar デモ"></a>
+Quotlet は Claude Code の `/usage` と同じ数値を表示します。5 時間のセッション枠と週間上限をどれだけ使ったか、それぞれいつリセットされるかがひと目でわかります。クリックすると詳細、最近の Claude Code セッション、トークン統計を確認できます。
+
+<a href="docs/demo-ja.mp4"><img src="docs/demo-ja.gif" width="420" alt="Quotlet デモ"></a>
 
 <sub>アニメーションをクリックすると MP4 動画を再生できます。</sub>
 
@@ -19,7 +21,7 @@ Quotabar は Claude Code の `/usage` と同じ数値を表示します。5 時�
   <img src="docs/settings-ja.png" width="24%" alt="設定">
 </p>
 
-> Quotabar は独立したオープンソースプロジェクトです。Anthropic が開発・提携・公認したものではありません。「Claude」は Anthropic の商標です。
+> Quotlet は独立したオープンソースプロジェクトです。Anthropic が開発・提携・公認したものではありません。「Claude」は Anthropic の商標です。
 
 ## 機能
 
@@ -40,16 +42,16 @@ Quotabar は Claude Code の `/usage` と同じ数値を表示します。5 時�
 
 ### ダウンロード
 
-[Releases](https://github.com/tluo-github/quotabar/releases/latest) から **Quotabar-<バージョン>.dmg** をダウンロードして開き、**Quotabar** を「アプリケーション」にドラッグします。Apple の署名と公証済みなので、ダブルクリックで開けます。
+[Releases](https://github.com/tluo-github/quotlet/releases/latest) から **Quotlet-<バージョン>.dmg** をダウンロードして開き、**Quotlet** を「アプリケーション」にドラッグします。Apple の署名と公証済みなので、ダブルクリックで開けます。
 
 ### Homebrew
 
 ```bash
-brew tap tluo-github/quotabar https://github.com/tluo-github/quotabar
-brew install --cask quotabar
+brew tap tluo-github/quotlet https://github.com/tluo-github/quotlet
+brew install --cask quotlet
 ```
 
-アップデートは `brew upgrade --cask quotabar`、削除は `brew uninstall --cask quotabar` です。
+アップデートは `brew upgrade --cask quotlet`、削除は `brew uninstall --cask quotlet` です。
 
 ### インストール後
 
@@ -63,16 +65,16 @@ brew install --cask quotabar
 | 上限とリセット時刻 | `api.anthropic.com/api/oauth/usage`（`/usage` と同じエンドポイント） |
 | セッションとトークン | `~/.claude/projects` にある Claude Code のローカルログ |
 
-- Quotabar は、Claude Code がキーチェーンに保存しているログイン情報（`Claude Code-credentials`）をシステムの `security` コマンドで読み取ります。ログイン情報を更新・変更することはなく、ネットワーク通信は Anthropic への使用量の問い合わせだけです。
-- Claude Code のログインは数時間ごとに期限が切れ、次に Claude Code を使ったときに自動で更新されます。Quotabar に期限切れと表示されたら、Claude Code で何かメッセージを送ってください。Quotabar は 1 分ごとに再試行し、その間は前回のデータを表示し続けます。
+- Quotlet は、Claude Code がキーチェーンに保存しているログイン情報（`Claude Code-credentials`）をシステムの `security` コマンドで読み取ります。ログイン情報を更新・変更することはなく、ネットワーク通信は Anthropic への使用量の問い合わせだけです。
+- Claude Code のログインは数時間ごとに期限が切れ、次に Claude Code を使ったときに自動で更新されます。Quotlet に期限切れと表示されたら、Claude Code で何かメッセージを送ってください。Quotlet は 1 分ごとに再試行し、その間は前回のデータを表示し続けます。
 - トークン統計では、1 つの返信を 1 回だけ数えます。Claude Code は 1 つの返信の使用量を複数のログ行に書き込みます。`/stats` はすべての行を数えているようで、合計が約 2 倍になります。
 - セッションと統計はこの Mac の分だけです。claude.ai、モバイル、他のコンピュータでの使用も上限には含まれますが、セッション一覧には表示されません。
 
-> 使用量のエンドポイントは公開ドキュメントがありません。Anthropic が仕様を変えた場合、Quotabar の更新が必要になることがあります。
+> 使用量のエンドポイントは公開ドキュメントがありません。Anthropic が仕様を変えた場合、Quotlet の更新が必要になることがあります。
 
 ## 更新とプロキシ
 
-- 上限は既定で 5 分ごとに更新します（設定で 1〜30 分）。Anthropic はこのエンドポイントのレート制限を公開していません。頻繁すぎると制限（HTTP 429）される場合があり、その際 Quotabar は 5 分待ってから再試行します。セッションと統計はローカルログを毎分読み込みます。
+- 上限は既定で 5 分ごとに更新します（設定で 1〜30 分）。Anthropic はこのエンドポイントのレート制限を公開していません。頻繁すぎると制限（HTTP 429）される場合があり、その際 Quotlet は 5 分待ってから再試行します。セッションと統計はローカルログを毎分読み込みます。
 - Anthropic に接続できないときは、使用量タブにプロキシ設定へのボタン付きの案内が出ます。**HTTP プロキシを使う** をオンにしてホストとポートを入力してください。
 
 ## ソースからビルド
@@ -80,10 +82,10 @@ brew install --cask quotabar
 Xcode Command Line Tools（`xcode-select --install`）が必要です。サードパーティの依存はありません。
 
 ```bash
-git clone https://github.com/tluo-github/quotabar.git && cd quotabar
-./build.sh            # この Mac 用に build/Quotabar.app を作成
+git clone https://github.com/tluo-github/quotlet.git && cd quotlet
+./build.sh            # この Mac 用に build/Quotlet.app を作成
 ./build.sh install    # ビルドして「アプリケーション」にコピーし起動
-./build.sh release    # ユニバーサルビルド：dist/Quotabar-<バージョン>.dmg と .zip
+./build.sh release    # ユニバーサルビルド：dist/Quotlet-<バージョン>.dmg と .zip
 ```
 
 開発用コマンドとコード構成は [English README](README.md#build-from-source) を参照してください。
