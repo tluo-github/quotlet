@@ -48,6 +48,7 @@ Quotlet는 Claude Code의 `/usage`와 같은 수치를 보여 줍니다. 5시간
 
 ```bash
 brew tap tluo-github/quotlet https://github.com/tluo-github/quotlet
+brew trust tluo-github/quotlet
 brew install --cask quotlet
 ```
 

@@ -48,6 +48,7 @@ Quotlet 显示的数字和 Claude Code 里的 `/usage` 一样：5 小时窗口�
 
 ```bash
 brew tap tluo-github/quotlet https://github.com/tluo-github/quotlet
+brew trust tluo-github/quotlet
 brew install --cask quotlet
 ```
 

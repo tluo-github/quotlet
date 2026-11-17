@@ -48,6 +48,7 @@ Quotlet は Claude Code の `/usage` と同じ数値を表示します。5 時�
 
 ```bash
 brew tap tluo-github/quotlet https://github.com/tluo-github/quotlet
+brew trust tluo-github/quotlet
 brew install --cask quotlet
 ```
 

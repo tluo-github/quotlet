@@ -8,7 +8,7 @@ cask "quotlet" do
   desc "Claude plan usage limits in the menu bar"
   homepage "https://quotlet.com"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Quotabar.app"
 

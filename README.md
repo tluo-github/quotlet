@@ -48,6 +48,7 @@ Download **Quotlet-<version>.dmg** from [Releases](https://github.com/tluo-githu
 
 ```bash
 brew tap tluo-github/quotlet https://github.com/tluo-github/quotlet
+brew trust tluo-github/quotlet
 brew install --cask quotlet
 ```
 
