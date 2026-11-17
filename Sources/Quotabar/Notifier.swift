@@ -130,6 +130,13 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// 一次性提醒（比如登录结果）：没授权过会先请求通知权限
+    func notify(title: String, body: String) {
+        requestAuthorization { ok in
+            if ok { self.post(id: "msg-\(Date().timeIntervalSince1970)", title: title, body: body) }
+        }
+    }
+
     private func post(id: String, title: String, body: String) {
         guard let center else { return }
         let content = UNMutableNotificationContent()

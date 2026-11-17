@@ -6,6 +6,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var store: Store
+    @ObservedObject private var cloud = Cloud.shared
     @AppStorage("tab") private var tab: Tab = .usage
     @State private var showSettings: Bool
     /// 整个面板的固定高度：正好放下用量页（三条额度 + 来源 + 本机消耗 + 额外用量）。
@@ -47,6 +48,11 @@ struct ContentView: View {
                     // 面板固定高度（见 panelHeight）。高度若在面板打开后再变，macOS 会固定窗口底边，
                     // 顶边就会离开状态栏出现空隙，所以不做动态高度。内容多的页（会话）在里面滚动。
                     ScrollView {
+                        if let err = cloud.errorMessage {
+                            Banner(text: L("登录失败：", "Sign-in failed: ", ja: "ログインに失敗しました：", ko: "로그인 실패: ") + err,
+                                   actionTitle: L("重试", "Try again", ja: "再試行", ko: "다시 시도")) { cloud.signIn() }
+                                .padding([.horizontal, .top], 14)
+                        }
                         switch tab {
                         case .usage: page(UsageTab(now: ctx.date, openSettings: { showSettings = true }))
                         case .sessions: page(SessionsTab(now: ctx.date))
@@ -85,12 +91,7 @@ struct ContentView: View {
                 HealthBadge(level: u.overallLevel)
             }
             Spacer(minLength: 4)
-            if store.isLoading || store.isScanning {
-                ProgressView().controlSize(.mini).frame(width: 24, height: 24)
-            } else {
-                IconButton(symbol: "arrow.clockwise", help: L("刷新（⌘R）", "Refresh (⌘R)", ja: "更新（⌘R）", ko: "새로 고침(⌘R)")) { store.refreshAll() }
-                    .keyboardShortcut("r")
-            }
+            AccountButton(cloud: cloud)
         }
     }
 
@@ -107,6 +108,13 @@ struct ContentView: View {
                     .lineLimit(1)
                     .padding(.leading, 6)
             }
+            // 刷新紧跟在更新时间后面：“什么时候更新的”和“现在更新”是一件事
+            if store.isLoading || store.isScanning {
+                ProgressView().controlSize(.mini).frame(width: 24, height: 24)
+            } else {
+                IconButton(symbol: "arrow.clockwise", help: L("刷新（⌘R）", "Refresh (⌘R)", ja: "更新（⌘R）", ko: "새로 고침(⌘R)")) { store.refreshAll() }
+                    .keyboardShortcut("r")
+            }
             Spacer()
             Button(L("退出", "Quit", ja: "終了", ko: "종료")) { NSApp.terminate(nil) }
                 .buttonStyle(.plain)
@@ -117,6 +125,105 @@ struct ContentView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+    }
+}
+
+/// 右上角的账号入口。没登录：「登录」小按钮；登录后：首字母头像 + 用户名，点开菜单（账号、在网页上查看、退出登录）
+struct AccountButton: View {
+    @ObservedObject var cloud: Cloud
+    @State private var hovering = false
+    @State private var showCard = false
+
+    var body: some View {
+        if cloud.isBusy {
+            ProgressView().controlSize(.mini).frame(width: 24, height: 24)
+        } else if let user = cloud.user {
+            // 不加 fixedSize：空间不够时名字可以被压缩、显示省略号，不会把顶部撑出面板
+            Button { showCard.toggle() } label: { signedInLabel(user) }
+                .buttonStyle(.plain)
+                .help(user.email ?? "Quotabar Cloud")
+                .popover(isPresented: $showCard, arrowEdge: .bottom) { accountCard(user) }
+        } else {
+            Button { cloud.signIn() } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "person.crop.circle").font(.system(size: 12, weight: .medium))
+                    Text(L("登录", "Sign in", ja: "ログイン", ko: "로그인"))
+                }
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(Color.primary)
+                .padding(.horizontal, 9).padding(.vertical, 3)
+                .background(Capsule().fill(hovering ? Theme.hover : .clear))
+                .overlay(Capsule().strokeBorder(Theme.divider, lineWidth: 1))
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering = $0 }
+            .fixedSize()
+            .help(L("登录 Quotabar Cloud，在网站和手机上查看额度和会话",
+                    "Sign in to Quotabar Cloud to see usage and sessions on the web and your phone",
+                    ja: "Quotabar Cloud にログインして、Web やスマートフォンで使用量とセッションを確認",
+                    ko: "Quotabar Cloud에 로그인해 웹과 휴대폰에서 사용량과 세션 보기"))
+        }
+    }
+
+    private func displayName(_ user: CloudUser) -> String { user.name ?? user.email ?? "Cloud" }
+
+    private func avatar(_ user: CloudUser, size: CGFloat) -> some View {
+        Text(String(displayName(user).prefix(1)).uppercased())
+            .font(.system(size: size * 0.55, weight: .semibold))
+            .foregroundStyle(Theme.surface)
+            .frame(width: size, height: size)
+            .background(Circle().fill(Theme.ink))
+    }
+
+    /// 点开头像后的小卡片：账号信息 + 在网页上查看 + 退出登录
+    private func accountCard(_ user: CloudUser) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                avatar(user, size: 32)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(displayName(user)).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    if let email = user.email, email != displayName(user) {
+                        Text(email).font(Theme.caption).foregroundStyle(Theme.text2).lineLimit(1)
+                    }
+                }
+            }
+            HStack(spacing: 8) {
+                ChipButton(title: L("在网页上查看", "Open on the web", ja: "Web で開く", ko: "웹에서 열기")) {
+                    showCard = false
+                    cloud.openWebsite()
+                }
+                ChipButton(title: L("退出登录", "Sign out", ja: "ログアウト", ko: "로그아웃")) {
+                    showCard = false
+                    cloud.signOut()
+                }
+            }
+        }
+        .padding(14)
+        .frame(minWidth: 220, alignment: .leading)
+    }
+
+    private func signedInLabel(_ user: CloudUser) -> some View {
+        let name = displayName(user)
+        return HStack(spacing: 5) {
+            avatar(user, size: 18)
+            Text(name)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                // 按名字实际宽度，最多 90pt；顶部挤的时候（英文长标签）还能再压缩
+                .frame(maxWidth: min(ceil((name as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium)]).width) + 1, 90),
+                       alignment: .leading)
+                .layoutPriority(-1)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(Theme.text2)
+        }
+        .padding(.leading, 3).padding(.trailing, 6).padding(.vertical, 3)
+        .background(Capsule().fill(hovering ? Theme.hover : .clear))
+        .contentShape(Capsule())
+        .onHover { hovering = $0 }
     }
 }
 
