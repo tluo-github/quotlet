@@ -1,0 +1,11 @@
+{
+  "$schema": "../cloud/node_modules/wrangler/config-schema.json",
+  // 门户网站：只有静态文件，没有 Worker 代码、数据库和定时任务。内容由 scripts/deploy-site.sh 打包到 build/site
+  "name": "quotabar",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "../build/site", "not_found_handling": "404-page" },
+  // 买好 quotabar.app 之前先用 quotabar.quotabar.workers.dev 预览；买好后加上：
+  // "routes": [{ "pattern": "quotabar.app", "custom_domain": true }, { "pattern": "www.quotabar.app", "custom_domain": true }],
+  "workers_dev": true,
+  "preview_urls": false
+}
