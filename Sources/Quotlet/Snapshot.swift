@@ -12,22 +12,23 @@ enum Snapshot {
 
     @MainActor
     static func run(store: Store, dir: String) async {
-        try? await Task.sleep(for: .seconds(4))  // 等数据加载完
+        try? await Task.sleep(for: .seconds(2))
+        // 等本机日志扫描完（最多 30 秒）
+        for _ in 0..<60 where store.local == nil || store.isScanning { try? await Task.sleep(for: .milliseconds(500)) }
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
 
         let stage = UserDefaults.standard.bool(forKey: "stage")
         // -stage YES 时多出一张 "closed"：只有仿状态栏、面板收起（演示视频的开头）
-        var pages: [(String, ContentView.Tab?)] = [
-            ("usage", .usage), ("sessions", .sessions), ("stats", .stats), ("settings", nil),
-        ]
-        if stage { pages.insert(("closed", .usage), at: 0) }
+        // 页面名 + 是否打开设置；history 是用量历史窗口
+        var pages: [(String, Bool)] = [("usage", false), ("settings", true), ("history", false)]
+        if stage { pages.insert(("closed", false), at: 0) }
         for (mode, name) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
-            for (page, tab) in pages {
-                if let tab { UserDefaults.standard.set(tab.rawValue, forKey: "tab") }
+            for (page, settings) in pages {
                 // -stage YES：带展示背景和仿状态栏（README 截图用）
                 let view = Group {
-                    if stage { Stage(open: page != "closed", startInSettings: tab == nil) }
-                    else { ContentView(startInSettings: tab == nil) }
+                    if page == "history" { HistoryView().frame(width: 1120, height: 900) }
+                    else if stage { Stage(open: page != "closed", startInSettings: settings) }
+                    else { ContentView(startInSettings: settings) }
                 }
                 .environmentObject(store)
                 let host = NSHostingView(rootView: view)
@@ -63,7 +64,6 @@ enum Snapshot {
                 win.orderOut(nil)
             }
         }
-        UserDefaults.standard.set(ContentView.Tab.usage.rawValue, forKey: "tab")
         exit(0)
     }
 }

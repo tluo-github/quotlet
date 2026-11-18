@@ -8,28 +8,25 @@ English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국�
 
 > **Quotlet was called Quotabar up to version 0.4.1.** Those releases are still named `Quotabar.app` / `Quotabar-<version>.dmg`. The GitHub repo moved from `tluo-github/quotabar` to `tluo-github/quotlet`; old links redirect.
 
-Quotlet shows the same numbers as `/usage` in Claude Code: how much of your 5-hour session and weekly limits you've used, and when each one resets. Click it for details, your recent Claude Code sessions and token stats.
-
-<a href="docs/demo-en.mp4"><img src="docs/demo-en.gif" width="420" alt="Quotlet demo"></a>
-
-<sub>Click the animation for the MP4 video.</sub>
+Quotlet shows the same numbers as `/usage` in Claude Code: how much of your 5-hour session and weekly limits you've used, and when each one resets. If you also use Codex, its limits sit right below. Click **History** for a bigger window with sessions, daily tokens, speed and API-equivalent cost.
 
 <p>
-  <img src="docs/usage-en.png" width="24%" alt="Usage">
-  <img src="docs/sessions-en.png" width="24%" alt="Sessions">
-  <img src="docs/stats-en.png" width="24%" alt="Stats">
-  <img src="docs/settings-en.png" width="24%" alt="Settings">
+  <img src="docs/usage-en.png" width="32%" alt="Panel">
+  <img src="docs/settings-en.png" width="32%" alt="Settings">
 </p>
+
+<img src="docs/history-en.png" alt="Usage history">
 
 > Quotlet is an independent open-source project. It is not made by, affiliated with, or endorsed by Anthropic. "Claude" is a trademark of Anthropic.
 
 ## Features
 
-- **Menu bar at a glance**: `5h 41% Wk 62%` (or just `41% 62%`), the share of your 5-hour and weekly limits used.
-- **Usage**: every limit on your plan (5-hour session, weekly, per-model weekly such as Fable) with reset time, countdown and a tick showing how much of the window has passed. Green when healthy, amber and red as you near a limit, with a status badge next to your plan name.
+- **Menu bar at a glance**: `5h 41% Wk 62%` (or just `41% 62%`), the share of your Claude 5-hour and weekly limits used.
+- **Panel: just the limits**: every Claude limit (5-hour, weekly, per-model weekly) and, if you use Codex, its 5-hour and weekly limits, one line each with the reset time and countdown. A pace forecast says where each limit will land at the reset, or how long until it runs out at this pace. When one side is nearly out and the other has room, a hint suggests switching.
+- **Today**: output and input tokens, requests, average and peak speed (tok/s) and the API-equivalent cost of today's Claude Code and Codex use.
+- **Usage history window**: filter by source and range (today, yesterday, 7/30/90 days, this year, all), with summary cards, a daily output/cost chart with an average-speed line, weekly-limit history, breakdowns by project and model, and a session table (right-click to copy a resume command). Export to CSV. Daily totals are kept locally, so history outlives Claude Code's 30-day log cleanup.
 - **Notifications**: when a limit is nearly used up (80%, 90% or 95%, your choice), when it's used up, and when it's available again after a reset.
-- **Sessions**: Claude Code sessions from the last 24 hours, 7 or 30 days, with a bar showing which ones used the most tokens. Right-click to copy a `claude --resume` command.
-- **Stats**: total tokens, tokens per day and tokens by project.
+- **Optional Quotlet Cloud**: sign in with GitHub to see your limits and sessions at [app.quotlet.com](https://app.quotlet.com), on the web or your phone. Off until you sign in.
 - **Four languages**: English, 简体中文, 日本語 and 한국어. Follows your system language or pick one in Settings. Light, dark or automatic appearance.
 - Configurable refresh interval and an optional HTTP proxy, with a hint when Anthropic can't be reached.
 
@@ -57,7 +54,7 @@ Update with `brew upgrade --cask quotlet`, remove with `brew uninstall --cask qu
 ### After installing
 
 - If the numbers don't show up in the menu bar, macOS may have tucked them into the hidden part of the menu bar. Hold **Command** and drag them where you want; macOS remembers the position.
-- Settings (gear icon, bottom left): language, appearance, menu bar style, refresh interval, launch at login, proxy and notifications.
+- Settings (bottom right of the panel): language, appearance, menu bar style, refresh interval, launch at login, proxy and notifications.
 
 ## How it works
 
@@ -65,10 +62,12 @@ Update with `brew upgrade --cask quotlet`, remove with `brew uninstall --cask qu
 |---|---|
 | Limits and reset times | `api.anthropic.com/api/oauth/usage`, the endpoint `/usage` uses |
 | Sessions and tokens | Claude Code's local logs in `~/.claude/projects` |
+| Codex limits, sessions and tokens | Codex's local logs in `~/.codex/sessions` (sessions Codex imported from Claude Code are skipped) |
 
-- Quotlet reads the login Claude Code keeps in your Keychain (`Claude Code-credentials`) with the system `security` tool. It never refreshes or changes that login, and the only network request it makes is that one call to Anthropic.
+- Quotlet reads the login Claude Code keeps in your Keychain (`Claude Code-credentials`) with the system `security` tool. It never refreshes or changes that login, Without Quotlet Cloud, the only network request it makes is that one call to Anthropic; after you sign in to Cloud it also sends limits, token counts and session status (never prompts or code) to app.quotlet.com.
 - Claude Code logins expire every few hours and Claude Code renews them the next time you use it. If Quotlet says your login expired, send any message in Claude Code. Quotlet retries every minute and keeps showing the last data meanwhile.
 - Token stats count each reply once. Claude Code writes the same usage on several log lines per reply; `/stats` appears to count every line, so its totals run about twice as high.
+- Speed is output tokens ÷ the time a reply took (from the request to the end of the reply). Cost is an estimate at each model's official API prices — what the usage would cost if billed through the API; subscriptions aren't charged this, and models without a known price (such as Codex models) are left out.
 - Sessions and stats cover this Mac only. Usage on claude.ai, mobile or other computers counts toward your limits but doesn't appear in the session list.
 
 > The usage endpoint isn't publicly documented. If Anthropic changes it, Quotlet may need an update.
@@ -76,7 +75,7 @@ Update with `brew upgrade --cask quotlet`, remove with `brew uninstall --cask qu
 ## Refresh and proxy
 
 - Limits refresh every 5 minutes by default (1 to 30 minutes in Settings). Anthropic doesn't publish a rate limit for this endpoint; very frequent refreshes can get rate limited (HTTP 429), and Quotlet then waits 5 minutes before trying again. Sessions and stats read local logs every minute.
-- If Anthropic can't be reached, the Usage tab shows a hint with a button to the proxy settings. Turn on **Use HTTP proxy** and enter your proxy's host and port. The proxy is on by default (`127.0.0.1:7890`) when your system language is Chinese or your region is mainland China, Hong Kong or Macau.
+- If Anthropic can't be reached, the panel shows a hint with a button to the proxy settings. Turn on **Use HTTP proxy** and enter your proxy's host and port. The proxy is on by default (`127.0.0.1:7890`) when your system language is Chinese or your region is mainland China, Hong Kong or Macau.
 
 ## Build from source
 
@@ -92,10 +91,12 @@ git clone https://github.com/tluo-github/quotlet.git && cd quotlet
 Development helpers:
 
 ```bash
-# Render every tab (light and dark) to PNG without touching the menu bar
-.build/release/Quotlet --snapshot /tmp/qb -AppleLanguages '(ja)' -stage YES -demo YES -scale 3
-# Regenerate the README screenshots and demo videos for all four languages (needs ffmpeg)
-scripts/make-demo.sh
+# Render the panel, settings and history (light and dark) to PNG without touching the menu bar
+.build/release/Quotlet --snapshot /tmp/qb -language ja -stage YES -demo YES -scale 3
+# Regenerate the README and website screenshots for all four languages
+scripts/make-screenshots.sh
+# Open the usage history window right after launch
+build/Quotlet.app/Contents/MacOS/Quotlet -openHistory YES -demo YES
 # A window with the real panel on a clean background, for recording demos
 .build/release/Quotlet --showcase -demo YES
 # Redraw the app icon

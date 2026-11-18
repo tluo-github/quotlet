@@ -31,9 +31,9 @@ enum Demo {
             let t = titles[i % titles.count]
             return SessionSummary(id: s.id, project: fake(s.project), cwd: nil,
                                   title: L(t.0, t.1, ja: t.2, ko: t.3), start: s.start, end: s.end, tokens: s.tokens,
-                                  subagentTokens: s.subagentTokens, requests: s.requests, mainModel: s.mainModel)
+                                  subagentTokens: s.subagentTokens, requests: s.requests, mainModel: s.mainModel, source: s.source)
         }
         let messages = snap.messages.map { m -> MessageUsage in var m = m; m.project = fake(m.project); return m }
-        return LocalSnapshot(sessions: sessions, messages: messages)
+        return LocalSnapshot(sessions: sessions, messages: messages, codexLimits: snap.codexLimits)
     }
 }

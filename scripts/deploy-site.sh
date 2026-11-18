@@ -1,8 +1,8 @@
 #!/bin/bash
-# 门户网站：把 site/ 和 docs/ 里的截图、演示视频打包到 build/site，再发布成只放静态文件的 Worker（site/wrangler.jsonc，quotlet.com）。
+# 门户网站：把 site/ 和 docs/ 里的截图打包到 build/site，再发布成只放静态文件的 Worker（site/wrangler.jsonc，quotlet.com）。
 #   scripts/deploy-site.sh          只打包（本地预览：python3 -m http.server -d build/site 8000）
 #   scripts/deploy-site.sh deploy   打包并发布
-# 需要 cwebp、ffmpeg（brew install webp ffmpeg）；发布用 cloud/ 里装好的 wrangler。
+# 需要 cwebp（brew install webp）；发布用 cloud/ 里装好的 wrangler。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -24,12 +24,10 @@ sed -e "s|{{VERSION}}|${VERSION}|g" \
 cp docs/icon.png "$OUT/assets/icon.png"
 
 for lang in en zh ja ko; do
-  for page in usage sessions stats settings; do
+  for page in usage settings panel; do
     cwebp -quiet -q 82 -resize 720 0 "docs/${page}-${lang}.png" -o "$OUT/assets/${page}-${lang}.webp"
   done
-  # 720 宽、无声、faststart，方便边下边播
-  ffmpeg -loglevel error -y -i "docs/demo-${lang}.mp4" -vf "scale=720:-2" -an \
-    -c:v libx264 -preset slow -crf 26 -pix_fmt yuv420p -movflags +faststart "$OUT/assets/demo-${lang}.mp4"
+  cwebp -quiet -q 82 -resize 1440 0 "docs/history-${lang}.png" -o "$OUT/assets/history-${lang}.webp"
 done
 
 du -sh "$OUT"

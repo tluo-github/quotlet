@@ -85,6 +85,11 @@ final class Store: ObservableObject {
     private let scanInterval: TimeInterval = 60
 
     private let scanner = SessionScanner()
+    /// 本机日志读最近多少天（会话列表、今天、按小时的图用；更早的历史看 HistoryStore 的每日汇总）
+    static let scanDays = 31
+
+    /// Codex 的额度（没装或没用过 Codex 时为空）
+    func codexLimits(now: Date) -> [LimitItem] { local?.codexLimits?.limitItems(now: now) ?? [] }
     private var timers: [Timer] = []
 
     init() {
@@ -115,12 +120,22 @@ final class Store: ObservableObject {
 
         Notifier.shared.setup()
         refreshAll()
+        // 开发用：-openHistory YES 启动后直接打开用量历史窗口（截图检查用）
+        if UserDefaults.standard.bool(forKey: "openHistory") {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                HistoryWindowController.shared.show(store: self)
+            }
+        }
         if Showcase.enabled {
             Task { @MainActor in Showcase.show(store: self) }
         }
         if let dir = Snapshot.directory {
             Task { await Snapshot.run(store: self, dir: dir) }
             return
+        }
+        if !Showcase.enabled && !Demo.enabled {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LegacyApp.check() }
         }
         timers.append(Timer.scheduledTimer(withTimeInterval: retryInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
@@ -197,6 +212,7 @@ final class Store: ObservableObject {
                 needsProxyHint = false
                 Notifier.shared.evaluate(fresh)
                 CloudSync.shared.usageUpdated(fresh, at: Date())
+                HistoryStore.shared.record(provider: "claude", items: fresh.limits)
             } catch {
                 errorMessage = error.localizedDescription
                 if case UsageError.http(429) = error { rateLimited = true } else { rateLimited = false }
@@ -213,10 +229,13 @@ final class Store: ObservableObject {
         guard !isScanning else { return }
         isScanning = true
         Task {
-            let snap = await scanner.scan()
+            let snap = await scanner.scan(days: Self.scanDays)
             local = Demo.enabled ? Demo.anonymize(snap) : snap
             isScanning = false
-            CloudSync.shared.localUpdated(snap)   // 演示模式下 CloudSync 自己不上报
+            HistoryStore.shared.merge(local ?? snap, scannedDays: Self.scanDays)   // 演示模式用匿名后的项目名
+            if let c = snap.codexLimits { HistoryStore.shared.record(provider: "codex", items: c.limitItems(now: Date()), at: c.observedAt) }
+            // 网站还不区分来源，先只上报 Claude 的会话和 token
+            CloudSync.shared.localUpdated(snap.only(.claude))   // 演示模式下 CloudSync 自己不上报
         }
     }
 

@@ -185,6 +185,8 @@ enum Fmt {
 
     /// claude-opus-5-5 → Opus 5.5；claude-sonnet-4-5-20250929 → Sonnet 4.5
     static func modelName(_ id: String) -> String {
+        // OpenAI 的模型名本来就好读：gpt-6.2-sol → GPT-6.2-sol
+        if id.lowercased().hasPrefix("gpt") { return "GPT" + id.dropFirst(3) }
         var parts = id.split(separator: "-").map(String.init)
         if parts.first == "claude" { parts.removeFirst() }
         if let last = parts.last, last.count == 8, Int(last) != nil { parts.removeLast() }

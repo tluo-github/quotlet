@@ -42,6 +42,8 @@ enum Theme {
     // 数据色：Claude 珊瑚橙，只用在图表（统计页柱状图、模型占比）和 Pro 标签。
     // 已用 dataviz 校验脚本检查：对比度浅色 / 深色都 >= 3:1。
     static let data = Color.dynamic(light: 0xC8643F, dark: 0xDD7A58)
+    /// Codex 的标识色（和 Claude 的珊瑚橙区分：橙 / 蓝明度也不同，色弱也分得开）
+    static let codex = Color.dynamic(light: 0x3D6FD9, dark: 0x7FA6F5)
     static let dataStrong = Color.dynamic(light: 0x9A4426, dark: 0xF4A588)  // 选中 / 悬停的那根柱子
 
     // 状态色。警告用琥珀而不是橙，和数据色区分；状态永远配文字。
@@ -57,7 +59,6 @@ enum Theme {
 
     // 字体
     static let hero = Font.system(size: 24, weight: .regular).monospacedDigit()   // 别用 light：细笔画看着发灰
-    static let heroLarge = Font.system(size: 28, weight: .regular).monospacedDigit()   // 用量页只有 1–2 条额度时
     static let value = Font.system(size: 15, weight: .regular).monospacedDigit()
     static let number = Font.system(size: 12, weight: .regular).monospacedDigit()
     static let body = Font.system(size: 12)

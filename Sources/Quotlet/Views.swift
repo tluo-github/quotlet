@@ -4,28 +4,17 @@ import SwiftUI
 
 // MARK: - 主面板
 
+/// 点状态栏打开的面板：只看配额（Claude、Codex 各一组）和「今天」的用量；会话和历史在「用量历史」窗口里。
 struct ContentView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var cloud = Cloud.shared
-    @AppStorage("tab") private var tab: Tab = .usage
     @State private var showSettings: Bool
-    /// 整个面板的固定高度：正好放下用量页（三条额度 + 来源 + 本机消耗 + 额外用量）。
-    static let panelHeight: CGFloat = 600
+    /// 整个面板的固定高度。高度若在面板打开后再变，macOS 会固定窗口底边，顶边就会离开状态栏出现空隙，
+    /// 所以不做动态高度；内容放不下时在里面滚动。
+    static let panelHeight: CGFloat = 700
 
     init(startInSettings: Bool = false) {
         _showSettings = State(initialValue: startInSettings)
-    }
-
-    enum Tab: String, CaseIterable {
-        case usage, sessions, stats
-
-        var title: String {
-            switch self {
-            case .usage: return L("用量", "Usage", ja: "使用量", ko: "사용량")
-            case .sessions: return L("会话", "Sessions", ja: "セッション", ko: "세션")
-            case .stats: return L("统计", "Stats", ja: "統計", ko: "통계")
-            }
-        }
     }
 
     var body: some View {
@@ -34,30 +23,23 @@ struct ContentView: View {
                 SettingsView { showSettings = false }
                     .id(store.language)
             } else {
-                VStack(alignment: .leading, spacing: 12) {
-                    header
-                    TabBar(selection: $tab)
-                }
-                .padding(.horizontal, 14)
-                .padding(.top, 12)
-                .padding(.bottom, 0)
-
-                Hairline()
+                header
+                    .padding(.horizontal, 14)
+                    .padding(.top, 12)
+                    .padding(.bottom, 8)
 
                 TimelineView(.periodic(from: .now, by: 30)) { ctx in
-                    // 面板固定高度（见 panelHeight）。高度若在面板打开后再变，macOS 会固定窗口底边，
-                    // 顶边就会离开状态栏出现空隙，所以不做动态高度。内容多的页（会话）在里面滚动。
                     ScrollView {
-                        if let err = cloud.errorMessage {
-                            Banner(text: L("登录失败：", "Sign-in failed: ", ja: "ログインに失敗しました：", ko: "로그인 실패: ") + err,
-                                   actionTitle: L("重试", "Try again", ja: "再試行", ko: "다시 시도")) { cloud.signIn() }
-                                .padding([.horizontal, .top], 14)
+                        VStack(alignment: .leading, spacing: 12) {
+                            if let err = cloud.errorMessage {
+                                Banner(text: L("登录失败：", "Sign-in failed: ", ja: "ログインに失敗しました：", ko: "로그인 실패: ") + err,
+                                       actionTitle: L("重试", "Try again", ja: "再試行", ko: "다시 시도")) { cloud.signIn() }
+                            }
+                            UsageTab(now: ctx.date, openSettings: { showSettings = true })
                         }
-                        switch tab {
-                        case .usage: page(UsageTab(now: ctx.date, openSettings: { showSettings = true }))
-                        case .sessions: page(SessionsTab(now: ctx.date))
-                        case .stats: page(StatsTab(now: ctx.date))
-                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 12)
                     }
                     .scrollIndicators(.automatic)
                 }
@@ -73,40 +55,36 @@ struct ContentView: View {
         .onAppear { store.refreshIfStale() }
     }
 
-    private func page(_ content: some View) -> some View {
-        content.frame(maxWidth: .infinity, alignment: .leading).padding(14)
-    }
-
     private var header: some View {
         HStack(spacing: 8) {
-            Text(L("Claude 用量", "Claude Usage", ja: "Claude 使用量", ko: "Claude 사용량")).font(.system(size: 13, weight: .semibold))
+            Text(L("用量", "Usage", ja: "使用量", ko: "사용량")).font(.system(size: 13, weight: .semibold))
                 .lineLimit(1).fixedSize()
-            if let plan = store.usage?.plan {
-                Text(plan.prefix(1).uppercased() + plan.dropFirst().lowercased())
-                    .font(Theme.label)
-                    .foregroundStyle(Theme.text2)
-                    .lineLimit(1).fixedSize()
-            }
-            if let u = store.usage {
-                HealthBadge(level: u.overallLevel)
+            if let level = overallLevel {
+                HealthBadge(level: level)
             }
             Spacer(minLength: 4)
             AccountButton(cloud: cloud)
         }
     }
 
+    /// Claude 和 Codex 所有额度里最差的状态
+    private var overallLevel: Level? {
+        let items = (store.usage?.limits ?? []) + store.codexLimits(now: Date())
+        guard !items.isEmpty else { return nil }
+        let levels = items.map { Level(percent: $0.percent, severity: $0.severity) }
+        if levels.contains(.critical) { return .critical }
+        if levels.contains(.warning) { return .warning }
+        return .normal
+    }
+
     private var footer: some View {
         HStack(spacing: 2) {
-            IconButton(symbol: "gearshape", help: L("设置", "Settings", ja: "設定", ko: "설정")) { showSettings = true }
-            IconButton(symbol: "globe", help: L("在浏览器打开 claude.ai 用量页", "Open claude.ai usage page", ja: "claude.ai の使用量ページを開く", ko: "claude.ai 사용량 페이지 열기")) {
-                NSWorkspace.shared.open(URL(string: "https://claude.ai/settings/usage")!)
-            }
             // 更新时间放底栏：标题栏不挤，也不会和蓝色的重置时间混淆
             if let t = store.lastUpdated {
                 Text(L("\(Fmt.time(t)) 更新", "Updated \(Fmt.time(t))", ja: "\(Fmt.time(t)) 更新", ko: "\(Fmt.time(t)) 업데이트"))
                     .font(Theme.caption).foregroundStyle(Theme.text2)
                     .lineLimit(1)
-                    .padding(.leading, 6)
+                    .padding(.leading, 4)
             }
             // 刷新紧跟在更新时间后面：“什么时候更新的”和“现在更新”是一件事
             if store.isLoading || store.isScanning {
@@ -116,15 +94,33 @@ struct ContentView: View {
                     .keyboardShortcut("r")
             }
             Spacer()
-            Button(L("退出", "Quit", ja: "終了", ko: "종료")) { NSApp.terminate(nil) }
-                .buttonStyle(.plain)
-                .font(Theme.caption)
-                .foregroundStyle(Theme.text2)
-                .padding(.horizontal, 8)
+            FooterButton(title: L("设置", "Settings", ja: "設定", ko: "설정")) { showSettings = true }
+                .keyboardShortcut(",")
+            FooterButton(title: L("退出", "Quit", ja: "終了", ko: "종료")) { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+    }
+}
+
+/// 底栏的文字按钮
+struct FooterButton: View {
+    let title: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(Theme.caption)
+                .foregroundStyle(Theme.text2)
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 5).fill(hovering ? Theme.hover : .clear))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 
@@ -235,7 +231,7 @@ struct UsageTab: View {
     var openSettings: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             if store.needsProxyHint, store.usage == nil || store.lastUpdated.map({ now.timeIntervalSince($0) > 600 }) == true {
                 // 网络不通 / 被地区拒绝：提示去设置代理，带一个直达按钮
                 Banner(text: L("连不上 Anthropic。如果你需要代理才能访问，请在设置里开启网络代理。",
@@ -256,56 +252,262 @@ struct UsageTab: View {
                 }
             }
 
-            if let u = store.usage {
-                let roomy = u.limits.count <= 2
-                VStack(spacing: 0) {
-                    ForEach(Array(u.limits.enumerated()), id: \.element.id) { i, item in
-                        if i > 0 { Hairline() }
-                        // 第一张卡顶部不再加边距：页面已有 14pt，叠加会比其他页空一倍
-                        LimitCard(item: item, now: now, roomy: roomy)
-                            .padding(.top, i == 0 ? 0 : (roomy ? 16 : 12))
-                            .padding(.bottom, roomy ? 16 : 12)
-                    }
-                }
-                Hairline()
+            let claude = store.usage?.limits ?? []
+            let codex = store.codexLimits(now: now)
+            let all = claude + codex
+            // 左边短标签、右边倒计时都按最长的那个定宽，Claude 和 Codex 两组的进度条一样长、左端对齐
+            let labelWidth = all.map {
+                ceil(($0.shortLabel as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium)]).width)
+            }.max() ?? 40
+            let countdownWidth = all.map {
+                ceil(($0.countdown(now: now) as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .regular)]).width) + 1
+            }.max() ?? 40
 
-                if let l = store.local {
-                    SectionBlock(title: L("本机 Claude Code", "Claude Code on this Mac", ja: "この Mac の Claude Code", ko: "이 Mac의 Claude Code"),
-                                 note: L("估算", "estimate", ja: "推定", ko: "추정")) {
-                        HStack(alignment: .top, spacing: 16) {
-                            if let s = u.session?.resetsAt {
-                                let r = l.tokens(since: s.addingTimeInterval(-5 * 3600))
-                                Tile(label: L("5 小时窗口", "5-hour window", ja: "5 時間枠", ko: "5시간 구간"),
-                                     value: Fmt.tokens(r.tokens.total), unit: "token",
-                                     detail: L("\(r.requests) 次请求", "\(r.requests) requests", ja: "\(r.requests) 件のリクエスト", ko: "요청 \(r.requests)회"))
-                            }
-                            if let w = u.weekly?.resetsAt {
-                                let r = l.tokens(since: w.addingTimeInterval(-7 * 86400))
-                                Tile(label: L("本周", "This week", ja: "今週", ko: "이번 주"),
-                                     value: Fmt.tokens(r.tokens.total), unit: "token",
-                                     detail: L("\(r.requests) 次请求", "\(r.requests) requests", ja: "\(r.requests) 件のリクエスト", ko: "요청 \(r.requests)회"))
+            if let advice = Advice.make(claude: claude, codex: codex, now: now) {
+                AdviceCard(advice: advice)
+            }
+
+            if let u = store.usage {
+                ProviderGroup(name: "Claude", plan: u.plan.map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() },
+                              dot: Theme.data, limits: u.limits, now: now,
+                              labelWidth: labelWidth, countdownWidth: countdownWidth) {
+                    // 用量来源压成一行；额外用量只在开启时显示
+                    let sources = sourcesLine(u.breakdown)
+                    let extra = u.extra.flatMap { $0.enabled ? $0 : nil }
+                    if sources != nil || extra != nil {
+                        VStack(alignment: .leading, spacing: 3) {
+                            if let sources { Text(sources) }
+                            if let e = extra {
+                                let used = e.used.map { String(format: "$%.2f", $0) } ?? "—"
+                                let limit = e.limit.map { String(format: "$%.2f", $0) } ?? "—"
+                                Text(L("额外用量：本月 \(used) / \(limit)", "Extra usage: \(used) of \(limit) this month", ja: "追加使用量：今月 \(used) / \(limit)", ko: "추가 사용량: 이번 달 \(used) / \(limit)"))
                             }
                         }
+                        .font(Theme.caption)
+                        .foregroundStyle(Theme.text2)
                     }
                 }
-
-                // 用量来源压成一行；额外用量只在开启时显示
-                VStack(alignment: .leading, spacing: 4) {
-                    if let line = sourcesLine(u.breakdown) {
-                        Text(line)
-                    }
-                    if let e = u.extra, e.enabled {
-                        let used = e.used.map { String(format: "$%.2f", $0) } ?? "—"
-                        let limit = e.limit.map { String(format: "$%.2f", $0) } ?? "—"
-                        Text(L("额外用量：本月 \(used) / \(limit)", "Extra usage: \(used) of \(limit) this month", ja: "追加使用量：今月 \(used) / \(limit)", ko: "추가 사용량: 이번 달 \(used) / \(limit)"))
-                    }
-                }
-                .font(Theme.caption)
-                .foregroundStyle(Theme.text2)
             } else if store.isLoading {
                 LoadingState(text: L("正在获取用量…", "Loading usage…", ja: "使用量を取得中…", ko: "사용량을 불러오는 중…"))
             }
+
+            if !codex.isEmpty, let c = store.local?.codexLimits {
+                Hairline()
+                ProviderGroup(name: "Codex", plan: c.planTitle, dot: Theme.codex, limits: codex, now: now,
+                              labelWidth: labelWidth, countdownWidth: countdownWidth) {
+                    // Codex 的额度只在用 Codex 时写进日志，隔久了说明一下是什么时候的数
+                    if now.timeIntervalSince(c.observedAt) > 600 {
+                        Text(L("记录于 \(Fmt.sessionTime(c.observedAt, now: now))，用 Codex 时更新",
+                               "As of \(Fmt.sessionTime(c.observedAt, now: now)); updates when you use Codex",
+                               ja: "\(Fmt.sessionTime(c.observedAt, now: now)) 時点 · Codex を使うと更新",
+                               ko: "\(Fmt.sessionTime(c.observedAt, now: now)) 기준 · Codex 사용 시 갱신"))
+                            .font(Theme.caption).foregroundStyle(Theme.text2)
+                    }
+                }
+            }
+
+            if let l = store.local {
+                Hairline()
+                TodayBlock(local: l, now: now)
+            }
         }
+    }
+}
+
+/// 一个工具的配额：标题行（名字 · 套餐 · 最紧张那条的百分比）+ 每条额度一行
+struct ProviderGroup<Footer: View>: View {
+    let name: String
+    let plan: String?
+    let dot: Color
+    let limits: [LimitItem]
+    let now: Date
+    let labelWidth: CGFloat
+    let countdownWidth: CGFloat
+    @ViewBuilder var footer: Footer
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 7) {
+                Circle().fill(dot).frame(width: 8, height: 8)
+                Text(name).font(.system(size: 13, weight: .semibold))
+                if let plan {
+                    Text(plan).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.text2)
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(Theme.hover))
+                }
+                Spacer()
+                if let worst = limits.max(by: { $0.percent < $1.percent }) {
+                    Text(Fmt.percent(worst.percent))
+                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(Level(percent: worst.percent, severity: worst.severity).color)
+                }
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(limits) { item in
+                    LimitRow(item: item, now: now, labelWidth: labelWidth, countdownWidth: countdownWidth)
+                }
+            }
+            footer
+        }
+    }
+}
+
+/// 额度告急时的建议：一边快用完、另一边还宽裕，就建议先用另一边
+struct Advice {
+    let title: String
+    let badge: String
+    let reason: String
+
+    static func make(claude: [LimitItem], codex: [LimitItem], now: Date) -> Advice? {
+        guard !claude.isEmpty, !codex.isEmpty else { return nil }
+        func tight(_ items: [LimitItem]) -> LimitItem? {
+            items.first { Pace(item: $0, now: now)?.emptyIn != nil || $0.percent >= 90 }
+        }
+        func roomy(_ items: [LimitItem]) -> Bool { items.allSatisfy { $0.percent < 70 && Pace(item: $0, now: now)?.emptyIn == nil } }
+        func left(_ items: [LimitItem]) -> String {
+            let five = items.first { $0.kind == "session" } ?? items[0]
+            let pct = Fmt.percent(max(0, 100 - five.percent))
+            return five.kind == "session"
+                ? L("5 小时还剩 \(pct)", "\(pct) left in 5h", ja: "5 時間枠の残り \(pct)", ko: "5시간 \(pct) 남음")
+                : L("还剩 \(pct)", "\(pct) left", ja: "残り \(pct)", ko: "\(pct) 남음")
+        }
+        func why(_ name: String, _ it: LimitItem) -> String {
+            var text: String
+            if let t = Pace(item: it, now: now)?.emptyIn {
+                text = L("\(name) \(it.shortLabel)约 \(Fmt.duration(t))后用完", "\(name) \(it.shortLabel) runs out in ~\(Fmt.duration(t))",
+                         ja: "\(name) \(it.shortLabel)は約\(Fmt.duration(t))で上限", ko: "\(name) \(it.shortLabel) 약 \(Fmt.duration(t)) 후 소진")
+            } else {
+                text = L("\(name) \(it.shortLabel)已用 \(Fmt.percent(it.percent))", "\(name) \(it.shortLabel) at \(Fmt.percent(it.percent))",
+                         ja: "\(name) \(it.shortLabel)は \(Fmt.percent(it.percent)) 使用", ko: "\(name) \(it.shortLabel) \(Fmt.percent(it.percent)) 사용")
+            }
+            if let r = it.resetsAt {
+                text += L("，\(Fmt.resetMoment(r, now: now)) 重置", " · resets \(Fmt.resetMoment(r, now: now))",
+                          ja: " · \(Fmt.resetMoment(r, now: now)) にリセット", ko: " · \(Fmt.resetMoment(r, now: now)) 재설정")
+            }
+            return text
+        }
+        if let t = tight(claude), roomy(codex) {
+            return Advice(title: L("先用 Codex", "Use Codex for now", ja: "今は Codex を", ko: "지금은 Codex"), badge: left(codex), reason: why("Claude", t))
+        }
+        if let t = tight(codex), roomy(claude) {
+            return Advice(title: L("先用 Claude", "Use Claude for now", ja: "今は Claude を", ko: "지금은 Claude"), badge: left(claude), reason: why("Codex", t))
+        }
+        return nil
+    }
+}
+
+struct AdviceCard: View {
+    let advice: Advice
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(advice.title).font(.system(size: 13, weight: .semibold))
+                Text(advice.badge).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.live)
+            }
+            Text(advice.reason).font(Theme.caption).foregroundStyle(Theme.text2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Theme.live.opacity(0.10)))
+    }
+}
+
+/// 面板底部的「今天」：Claude Code + Codex 今天的输出、输入、请求、速度、峰值和 API 等值费用
+struct TodayBlock: View {
+    let local: LocalSnapshot
+    let now: Date
+    @EnvironmentObject var store: Store
+
+    var body: some View {
+        let start = Fmt.calendar.startOfDay(for: now)
+        let st = UsageStats.of(local.messages.lazy.filter { $0.ts >= start })
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(L("今天", "Today", ja: "今日", ko: "오늘")).font(.system(size: 13, weight: .semibold))
+                Text(local.hasCodex ? "Claude Code + Codex" : "Claude Code").font(Theme.caption).foregroundStyle(Theme.text2)
+                    .lineLimit(1)
+                Spacer()
+                Button {
+                    HistoryWindowController.shared.show(store: store)
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock.arrow.circlepath").font(.system(size: 11, weight: .medium))
+                        Text(L("历史", "History", ja: "履歴", ko: "기록"))
+                    }
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 9).padding(.vertical, 3)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.hover))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L("打开用量历史窗口", "Open usage history", ja: "使用量の履歴を開く", ko: "사용량 기록 열기"))
+            }
+            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+                GridRow {
+                    TodayTile(label: L("输出", "Output", ja: "出力", ko: "출력"), value: Fmt.tokens(st.tokens.output))
+                    TodayTile(label: L("输入（含缓存）", "Input (incl. cache)", ja: "入力（キャッシュ含む）", ko: "입력(캐시 포함)"), value: Fmt.tokens(st.inputAll))
+                }
+                GridRow {
+                    TodayTile(label: L("请求", "Requests", ja: "リクエスト", ko: "요청"), value: Fmt.count(st.requests))
+                    TodayTile(label: L("平均速度", "Avg speed", ja: "平均速度", ko: "평균 속도"),
+                              value: st.avgSpeed.map { Fmt.speed($0) } ?? "—", unit: st.avgSpeed == nil ? nil : "tok/s")
+                }
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                if st.peakSpeed > 0, let at = st.peakAt {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(L("今日峰值", "Today's peak", ja: "今日のピーク", ko: "오늘 최고")).foregroundStyle(Theme.text2)
+                        Spacer()
+                        Text("\(Fmt.speed(st.peakSpeed)) tok/s").fontWeight(.semibold).foregroundStyle(Theme.warning)
+                        Text("· \(Fmt.time(at))").foregroundStyle(Theme.text2)
+                    }
+                }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(L("今日费用", "Today's cost", ja: "今日の費用", ko: "오늘 비용")).foregroundStyle(Theme.text2)
+                    Text(L("API 等值", "API equiv.", ja: "API 換算", ko: "API 환산")).font(.system(size: 10.5)).foregroundStyle(Theme.text2)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(Theme.hover))
+                    Spacer()
+                    Text((st.unpricedRequests > 0 ? "≥" : "") + Fmt.money(st.cost)).fontWeight(.semibold)
+                    Image(systemName: "info.circle").font(.system(size: 11)).foregroundStyle(Theme.text2)
+                        .help(costHelp(st))
+                }
+            }
+            .font(.system(size: 12).monospacedDigit())
+        }
+    }
+
+    private func costHelp(_ st: UsageStats) -> String {
+        var t = L("按各模型官方 API 价格估算：如果这些用量按 API 付费，大约要花多少钱。包月套餐实际不按这个收费。",
+                  "Estimated at each model's official API prices: what this usage would cost if billed through the API. Subscription plans aren't charged this.",
+                  ja: "各モデルの公式 API 価格で見積もった、API で支払った場合の金額です。定額プランでは実際にはこの金額はかかりません。",
+                  ko: "각 모델의 공식 API 가격으로 추정한 금액으로, API로 결제했다면 드는 비용입니다. 구독 요금제는 실제로 이만큼 청구되지 않습니다.")
+        if st.unpricedRequests > 0 {
+            t += "\n" + L("其中 \(st.unpricedRequests) 次请求的模型价格未知（如 Codex），没算进去。",
+                          "\(st.unpricedRequests) requests use models without a known price (e.g. Codex) and aren't included.",
+                          ja: "うち \(st.unpricedRequests) 件は価格不明のモデル（Codex など）のため含まれていません。",
+                          ko: "가격을 알 수 없는 모델(예: Codex)의 요청 \(st.unpricedRequests)건은 포함되지 않았습니다.")
+        }
+        return t
+    }
+}
+
+struct TodayTile: View {
+    let label: String
+    let value: String
+    var unit: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label).font(Theme.caption).foregroundStyle(Theme.text2).lineLimit(1)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value).font(.system(size: 17, weight: .semibold).monospacedDigit())
+                if let unit { Text(unit).font(Theme.caption).foregroundStyle(Theme.text2) }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -321,375 +523,158 @@ func sourcesLine(_ rows: [BreakdownRow]) -> String? {
     return L("本周来源：", "This week: ", ja: "今週の内訳：", ko: "이번 주 사용처: ") + parts
 }
 
-struct LimitCard: View {
-    let item: LimitItem
-    let now: Date
-    var roomy = false   // 额度少（≤2 条）时数字更大、间距更松
-
-    private var level: Level { Level(percent: item.percent, severity: item.severity) }
-
-    private var windowLength: TimeInterval? {
-        if item.kind == "session" { return 5 * 3600 }
-        if item.kind.hasPrefix("weekly") { return 7 * 86400 }
+extension LimitItem {
+    /// 窗口长度：5 小时 / 7 天；其他类型不知道就不画时间刻度、不做预测
+    var windowLength: TimeInterval? {
+        if kind == "session" { return 5 * 3600 }
+        if kind.hasPrefix("weekly") { return 7 * 86400 }
         return nil
     }
 
+    /// 紧凑行左边的短标签：「5 小时」「本周」「Opus 周」
+    static func shortLabel(kind: String, scope: String?) -> String {
+        switch kind {
+        case "session": return L("5 小时", "5h", ja: "5 時間", ko: "5시간")
+        case "weekly_all": return L("本周", "Week", ja: "今週", ko: "이번 주")
+        case "weekly_scoped":
+            let s = scope ?? L("指定", "Scoped", ja: "対象", ko: "지정")
+            return L("\(s) 周", "\(s) wk", ja: "\(s) 週", ko: "\(s) 주간")
+        default: return scope ?? kind
+        }
+    }
+
+    var shortLabel: String { Self.shortLabel(kind: kind, scope: scope) }
+
+    /// 紧凑行右边的倒计时：「3小时6分」「3天19小时」
+    func countdown(now: Date) -> String {
+        guard let r = resetsAt else { return "" }
+        return r > now ? Fmt.duration(r.timeIntervalSince(now)) : "—"
+    }
+}
+
+/// 按窗口里到现在为止的平均速度估算：重置时会用到多少，会不会在重置前用完。
+/// 只用当前百分比和已过时间，不需要历史数据；窗口刚开始时速度不准，不预测。
+struct Pace {
+    let projected: Double          // 照这个速度，重置时用到的百分比
+    let emptyIn: TimeInterval?     // 会提前用完时：还有多久用完
+    let early: TimeInterval?       // 比重置早多久
+
+    init?(item: LimitItem, now: Date) {
+        guard let r = item.resetsAt, let w = item.windowLength else { return nil }
+        let left = r.timeIntervalSince(now)
+        let elapsed = w - left
+        guard left > 0, elapsed > 60, item.percent > 0, item.percent < 100 else { return nil }
+        // 已过时间不到窗口的 10% 且用量不到 10%：样本太少，不预测
+        guard elapsed >= w * 0.1 || item.percent >= 10 else { return nil }
+        let rate = item.percent / elapsed
+        projected = item.percent + rate * left
+        if projected >= 100 {
+            let t = (100 - item.percent) / rate
+            emptyIn = t
+            early = left - t
+        } else {
+            emptyIn = nil
+            early = nil
+        }
+    }
+
+    var level: Level {
+        if emptyIn != nil { return .critical }
+        if projected >= 85 { return .warning }
+        return .normal
+    }
+}
+
+/// 一条额度的紧凑显示（标签按最长的定宽，几行的进度条和数字对齐）：
+///   5 小时  ━━━━━━━│──  54%  3小时14分
+///           今天 10:30 重置 · 届时约 72%
+///           约 46分钟后用完，比重置早 39分钟      ← 只在会提前用完时出现，红色
+struct LimitRow: View {
+    let item: LimitItem
+    let now: Date
+    var labelWidth: CGFloat = 40
+    var countdownWidth: CGFloat = 56
+
+    private var level: Level { Level(percent: item.percent, severity: item.severity) }
+
     /// 窗口里已经过去的时间比例，用来画进度条上的竖线。
     private var elapsed: Double? {
-        guard let r = item.resetsAt, let w = windowLength else { return nil }
+        guard let r = item.resetsAt, let w = item.windowLength else { return nil }
         return min(1, max(0, 1 - r.timeIntervalSince(now) / w))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: roomy ? 8 : 6) {
-            Text(item.title).font(Theme.label).foregroundStyle(Theme.text2)
-
-            // 百分比 + 进度条同一行。状态文字只在标题栏显示一次（HealthBadge），这里靠颜色表达。
-            // 百分比列按「100%」的宽度占位，几张卡的进度条左端对齐。
-            HStack(alignment: .center, spacing: 12) {
-                ZStack(alignment: .leading) {
-                    Text("100%").hidden()
-                    Text(Fmt.percent(item.percent)).foregroundStyle(level.color)
-                }
-                .font(roomy ? Theme.heroLarge : Theme.hero)
-                // 进度条粗细按重要程度：额度 6 / 项目 4 / 会话 2；竖线 = 时间已过多少
+        let pace = Pace(item: item, now: now)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 10) {
+                Text(item.shortLabel)
+                    .font(Theme.bodyMedium)
+                    .lineLimit(1)
+                    .frame(width: labelWidth, alignment: .leading)
+                    .help(item.title)
+                // 竖线 = 时间已过多少
                 UsageBar(fraction: item.percent / 100, marker: elapsed, color: level.color, height: 6)
                     .help(elapsedText ?? "")
+                Text(Fmt.percent(item.percent))
+                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(level.color)
+                    .frame(width: 40, alignment: .trailing)
+                Text(item.countdown(now: now))
+                    .font(Theme.caption.monospacedDigit())
+                    .foregroundStyle(Theme.text2)
+                    .lineLimit(1).fixedSize()
+                    .frame(width: countdownWidth, alignment: .trailing)
             }
 
-            if let r = item.resetsAt {
-                resetLine(r).font(Theme.caption).foregroundStyle(Theme.text2).lineLimit(1)
+            VStack(alignment: .leading, spacing: 2) {
+                if let r = item.resetsAt {
+                    resetLine(r, pace: pace)
+                        .foregroundStyle(Theme.text2)
+                }
+                if item.percent >= 100, let r = item.resetsAt, r > now {
+                    Text(L("已用完，\(Fmt.duration(r.timeIntervalSince(now)))后恢复",
+                           "Used up · back in \(Fmt.duration(r.timeIntervalSince(now)))",
+                           ja: "上限に到達 · \(Fmt.duration(r.timeIntervalSince(now)))後に回復",
+                           ko: "모두 사용 · \(Fmt.duration(r.timeIntervalSince(now))) 후 복구"))
+                        .foregroundStyle(Theme.critical)
+                } else if let pace, let t = pace.emptyIn, let e = pace.early {
+                    Text(L("约 \(Fmt.duration(t))后用完，比重置早 \(Fmt.duration(e))",
+                           "Empty in ~\(Fmt.duration(t)) — \(Fmt.duration(e)) before reset",
+                           ja: "約\(Fmt.duration(t))で上限 · リセットの\(Fmt.duration(e))前",
+                           ko: "약 \(Fmt.duration(t)) 후 소진 · 재설정 \(Fmt.duration(e)) 전"))
+                        .fontWeight(.medium)
+                        .foregroundStyle(Theme.critical)
+                }
             }
+            .font(Theme.caption)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, labelWidth + 10)
         }
     }
 
-    /// 一句话：「今天 18:50 重置 · 还有 49分钟」，时间用蓝色半粗体
-    private func resetLine(_ r: Date) -> Text {
-        let countdown = Fmt.countdown(to: r, now: now)
-        if r <= now { return Text(countdown) }
+    /// 「今天 10:30 重置 · 届时约 72%」，重置时间用蓝色半粗体；会提前用完时不写届时多少（下一行红字说明）
+    private func resetLine(_ r: Date, pace: Pace?) -> Text {
+        if r <= now { return Text(Fmt.countdown(to: r, now: now)) }
         let moment = Text(Fmt.resetMoment(r, now: now)).fontWeight(.semibold).foregroundColor(Theme.time)
+        var line: Text
         switch Lang.current {
-        case .zh: return moment + Text(" 重置 · \(countdown)")
-        case .en: return Text("Resets ") + moment + Text(" · \(countdown)")
-        case .ja: return moment + Text(" にリセット · \(countdown)")
-        case .ko: return moment + Text(" 재설정 · \(countdown)")
+        case .zh: line = moment + Text(" 重置")
+        case .en: line = Text("Resets ") + moment
+        case .ja: line = moment + Text(" にリセット")
+        case .ko: line = moment + Text(" 재설정")
         }
+        if let pace, pace.emptyIn == nil, item.percent < 100 {
+            let p = Fmt.percent(pace.projected)
+            let s = Text(L(" · 届时约 \(p)", " · ~\(p) by then", ja: " · その時点で約 \(p)", ko: " · 그때 약 \(p)"))
+            line = line + (pace.level == .normal ? s : s.foregroundColor(pace.level.color))
+        }
+        return line
     }
 
     private var elapsedText: String? {
         elapsed.map { e in
             let p = Int((e * 100).rounded())
             return L("竖线：时间已过 \(p)%", "Marker: \(p)% of window elapsed", ja: "縦線：経過 \(p)%", ko: "세로선: \(p)% 경과")
-        }
-    }
-}
-
-// MARK: - 会话
-
-struct SessionsTab: View {
-    @EnvironmentObject var store: Store
-    let now: Date
-    @AppStorage("sessionRange") private var range: Range = .day
-
-    enum Range: String, CaseIterable {
-        case day, week, month
-
-        var title: String {
-            switch self {
-            case .day: return L("24 小时", "24 hours", ja: "24 時間", ko: "24시간")
-            case .week: return L("7 天", "7 days", ja: "7 日", ko: "7일")
-            case .month: return L("30 天", "30 days", ja: "30 日", ko: "30일")
-            }
-        }
-        var seconds: TimeInterval {
-            switch self {
-            case .day: return 86400
-            case .week: return 7 * 86400
-            case .month: return 30 * 86400
-            }
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ChipPicker(options: Range.allCases.map { ($0, $0.title) }, selection: $range)
-
-            if let l = store.local {
-                let list = l.sessions(since: now.addingTimeInterval(-range.seconds))
-                let total = list.reduce(0) { $0 + $1.tokens.total }
-                let active = list.filter { $0.isActive(now: now) }.count
-                let maxTokens = list.map(\.tokens.total).max() ?? 1
-                let mainModel = Dictionary(grouping: list, by: \.mainModel).max { $0.value.count < $1.value.count }?.key
-
-                // 一行概览，不再用三个大数字抢列表的风头
-                Text(summary(count: list.count, tokens: total, active: active))
-                    .font(Theme.caption).foregroundStyle(Theme.text2)
-
-                if list.isEmpty {
-                    LoadingState(text: L("这段时间没有 Claude Code 会话", "No Claude Code sessions in this period", ja: "この期間の Claude Code セッションはありません", ko: "이 기간에는 Claude Code 세션이 없습니다"), spinner: false)
-                }
-
-                ForEach(groupByDay(list), id: \.day) { group in
-                    VStack(alignment: .leading, spacing: 0) {
-                        HStack {
-                            Text(Fmt.dayLabel(group.day, now: now)).font(Theme.label).foregroundStyle(Theme.text2)
-                            Spacer()
-                            Text(Fmt.tokens(group.items.reduce(0) { $0 + $1.tokens.total }))
-                                .font(Theme.caption).foregroundStyle(Theme.text2).monospacedDigit()
-                        }
-                        .padding(.horizontal, 6).padding(.bottom, 2)
-                        ForEach(group.items) {
-                            SessionRow(session: $0, now: now, maxTokens: maxTokens, mainModel: mainModel)
-                        }
-                    }
-                    // 行内留 6pt 给悬停背景，整体向外让出，让文字和其他页一样对齐到左边距
-                    .padding(.horizontal, -6)
-                }
-
-                if !list.isEmpty {
-                    Text(L("右键会话可以复制恢复命令", "Right-click a session to copy its resume command", ja: "セッションを右クリックすると再開コマンドをコピーできます", ko: "세션을 오른쪽 클릭하면 재개 명령을 복사할 수 있습니다")).font(Theme.caption).foregroundStyle(Theme.text2)
-                }
-            } else {
-                LoadingState(text: L("正在读取本机会话日志…", "Reading local session logs…", ja: "ローカルのセッションログを読み込み中…", ko: "로컬 세션 로그를 읽는 중…"))
-            }
-        }
-    }
-
-    private func summary(count: Int, tokens: Int, active: Int) -> String {
-        var t = L("\(count) 个会话 · \(Fmt.tokens(tokens)) token", "\(count) sessions · \(Fmt.tokens(tokens)) tokens",
-                  ja: "\(count) セッション · \(Fmt.tokens(tokens)) トークン", ko: "세션 \(count)개 · 토큰 \(Fmt.tokens(tokens))")
-        if active > 0 { t += L(" · \(active) 个进行中", " · \(active) active", ja: " · 進行中 \(active)", ko: " · 진행 중 \(active)") }
-        return t
-    }
-
-    private func groupByDay(_ list: [SessionSummary]) -> [(day: Date, items: [SessionSummary])] {
-        var order: [Date] = []
-        var map: [Date: [SessionSummary]] = [:]
-        for s in list {
-            let d = Fmt.calendar.startOfDay(for: s.end)
-            if map[d] == nil { order.append(d) }
-            map[d, default: []].append(s)
-        }
-        return order.map { ($0, map[$0]!) }
-    }
-}
-
-struct SessionRow: View {
-    let session: SessionSummary
-    let now: Date
-    var maxTokens: Int = 1
-    var mainModel: String? = nil
-    @State private var hovering = false
-
-    var body: some View {
-        let s = session
-        let active = s.isActive(now: now)
-        HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
-                    if active {
-                        Circle().fill(Theme.live).frame(width: 6, height: 6)
-                            .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 0.5 }
-                            .padding(.trailing, 6)
-                    }
-                    Text(s.title).font(Theme.bodyMedium).lineLimit(1)
-                    Spacer(minLength: 8)
-                    Text(Fmt.tokens(s.tokens.total)).font(Theme.number)
-                }
-                HStack(alignment: .firstTextBaseline) {
-                    Text(meta).font(Theme.caption).foregroundStyle(Theme.text2).lineLimit(1)
-                    Spacer(minLength: 8)
-                    // 进行中只靠标题前的绿点表示，这里和其他会话一样显示时长
-                    Text(Fmt.compactDuration(s.end.timeIntervalSince(s.start)))
-                        .font(Theme.caption).foregroundStyle(Theme.text2).monospacedDigit()
-                }
-                // 用量比例条：一眼看出哪个会话用得多
-                UsageBar(fraction: Double(s.tokens.total) / Double(max(1, maxTokens)), marker: nil,
-                         color: Theme.data, height: 2)
-                    .padding(.top, 2)
-            }
-        }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 6)
-        .background(RoundedRectangle(cornerRadius: 7).fill(hovering ? Theme.hover : .clear))
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
-        .help(Self.tokenDetail(s) + "\n" + L("会话 ID：", "Session ID: ", ja: "セッション ID：", ko: "세션 ID: ") + s.id)
-        .contextMenu {
-            Button(L("复制恢复命令", "Copy resume command", ja: "再開コマンドをコピー", ko: "재개 명령 복사")) {
-                copy(s.cwd.map { "cd \(shellQuote($0)) && claude --resume \(s.id)" } ?? "claude --resume \(s.id)")
-            }
-            Button(L("复制会话 ID", "Copy session ID", ja: "セッション ID をコピー", ko: "세션 ID 복사")) { copy(s.id) }
-            if let cwd = s.cwd {
-                Button(L("在访达中打开项目目录", "Open project folder in Finder", ja: "プロジェクトフォルダを Finder で開く", ko: "Finder에서 프로젝트 폴더 열기")) { NSWorkspace.shared.open(URL(fileURLWithPath: cwd)) }
-            }
-        }
-    }
-
-    /// 「项目 · 12:09–15:27」，模型和主要模型不同时才标出来
-    private var meta: String {
-        let s = session
-        var parts = [s.project, "\(Fmt.sessionTime(s.start, now: s.end))–\(Fmt.time(s.end))"]
-        if let mainModel, s.mainModel != mainModel { parts.append(Fmt.modelName(s.mainModel)) }
-        return parts.joined(separator: " · ")
-    }
-
-    static func tokenDetail(_ s: SessionSummary) -> String {
-        var text = Fmt.modelName(s.mainModel) + " · " + tokenBreakdown(s.tokens)
-        if s.subagentTokens > 0 { text += "\n" + L("其中子代理 ", "Subagents: ", ja: "うちサブエージェント ", ko: "하위 에이전트: ") + Fmt.tokens(s.subagentTokens) }
-        return text
-    }
-
-    private func copy(_ s: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(s, forType: .string)
-    }
-
-    private func shellQuote(_ s: String) -> String {
-        "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
-}
-
-// MARK: - 统计
-
-struct StatsTab: View {
-    @EnvironmentObject var store: Store
-    let now: Date
-    @AppStorage("statsDays") private var days: Int = 7
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ChipPicker(options: [(7, L("7 天", "7 days", ja: "7 日", ko: "7일")), (30, L("30 天", "30 days", ja: "30 日", ko: "30일"))], selection: $days)
-
-            if let l = store.local {
-                content(l)
-            } else {
-                LoadingState(text: L("正在读取本机会话日志…", "Reading local session logs…", ja: "ローカルのセッションログを読み込み中…", ko: "로컬 세션 로그를 읽는 중…"))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func content(_ l: LocalSnapshot) -> some View {
-        let cal = Fmt.calendar
-        let since = cal.date(byAdding: .day, value: -(days - 1), to: cal.startOfDay(for: now))!
-        let sessions = l.sessions(since: since)
-        let daily = l.daily(days: days, now: now)
-        let models = l.models(since: since).filter { $0.tokens.total > 0 }
-        let projects = Array(l.projects(since: since).filter { $0.tokens > 0 }.prefix(5))
-        let total = models.reduce(0) { $0 + $1.tokens.total }
-        let activeDays = daily.filter { $0.tokens.total > 0 }.count
-        let longest = sessions.map { $0.end.timeIntervalSince($0.start) }.max() ?? 0
-        let notableModels = models.filter { total > 0 && Double($0.tokens.total) / Double(total) >= 0.01 }
-
-        // 主角：总 token；其余压成一行
-        VStack(alignment: .leading, spacing: 3) {
-            Text(L("总 token", "Total tokens", ja: "合計トークン", ko: "총 토큰")).font(Theme.label).foregroundStyle(Theme.text2)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(Fmt.tokens(total)).font(Theme.hero)
-                Text("token").font(Theme.caption).foregroundStyle(Theme.text2)
-            }
-            Text(statsLine(sessions: sessions.count, activeDays: activeDays, longest: longest,
-                           model: notableModels.count == 1 ? notableModels.first.map { Fmt.modelName($0.model) } : nil))
-                .font(Theme.caption).foregroundStyle(Theme.text2)
-        }
-
-        DailyChart(daily: daily, now: now)
-
-        if !projects.isEmpty {
-            SectionBlock(title: L("按项目", "By project", ja: "プロジェクト別", ko: "프로젝트별")) {
-                let top = projects.first?.tokens ?? 1
-                ForEach(projects) { p in
-                    ShareRow(name: p.project, value: Fmt.tokens(p.tokens), fraction: Double(p.tokens) / Double(max(1, top)))
-                }
-            }
-        }
-
-        if notableModels.count > 1 {
-            SectionBlock(title: L("按模型", "By model", ja: "モデル別", ko: "모델별")) {
-                ForEach(notableModels) { m in
-                    let pct = Double(m.tokens.total) / Double(max(1, total)) * 100
-                    ShareRow(name: Fmt.modelName(m.model), value: String(format: "%.0f%%", pct), fraction: pct / 100)
-                }
-            }
-        }
-
-        Text(L("来自本机日志，同一条回复只算一次。", "From local logs; each reply is counted once.", ja: "ローカルログから集計。同じ返信は 1 回だけ数えます。", ko: "로컬 로그 기준이며 같은 응답은 한 번만 셉니다."))
-            .font(Theme.caption).foregroundStyle(Theme.text2)
-    }
-
-    private func statsLine(sessions: Int, activeDays: Int, longest: TimeInterval, model: String?) -> String {
-        var parts = [
-            L("\(sessions) 个会话", "\(sessions) sessions", ja: "\(sessions) セッション", ko: "세션 \(sessions)개"),
-            L("活跃 \(activeDays)/\(days) 天", "active \(activeDays)/\(days) days", ja: "稼働 \(activeDays)/\(days) 日", ko: "활동 \(activeDays)/\(days)일"),
-        ]
-        if longest > 0 { parts.append(L("最长 ", "longest ", ja: "最長 ", ko: "최장 ") + Fmt.compactDuration(longest)) }
-        if let model { parts.append(model) }
-        // 每一项内部用不换行空格，折行只发生在「·」之间，不会把 "Opus 5.5" 拆成两行
-        return parts.map { $0.replacingOccurrences(of: " ", with: "\u{00A0}") }.joined(separator: " · ")
-    }
-}
-
-/// 名称 + 比例条 + 数值，一行
-struct ShareRow: View {
-    let name: String
-    let value: String
-    let fraction: Double
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(name).font(Theme.body).lineLimit(1).frame(width: 96, alignment: .leading)
-            UsageBar(fraction: fraction, marker: nil, color: Theme.data, height: 4)
-            Text(value).font(Theme.number).frame(width: 56, alignment: .trailing)
-        }
-    }
-}
-
-struct DailyChart: View {
-    let daily: [(day: Date, tokens: TokenCount)]
-    let now: Date
-    @State private var selected: Date?
-
-    var body: some View {
-        let cal = Fmt.calendar
-        let picked = selected.flatMap { s in daily.first { cal.isDate($0.day, inSameDayAs: s) } }
-        let focus = picked ?? daily.last
-
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(L("每天 token", "Tokens per day", ja: "1 日あたりのトークン", ko: "일별 토큰")).font(Theme.label).foregroundStyle(Theme.text2)
-                Spacer()
-                Text(focus.map { Fmt.dayLabel($0.day, now: now) } ?? "")
-                    .font(Theme.caption).foregroundStyle(Theme.text2)
-                Text(focus.map { Fmt.tokens($0.tokens.total) } ?? "—").font(Theme.number)
-            }
-
-            Chart(daily, id: \.day) { d in
-                BarMark(x: .value("day", d.day, unit: .day),
-                        y: .value("token", d.tokens.total),
-                        width: .ratio(0.6))
-                    .cornerRadius(2)
-                    .foregroundStyle(focus.map { cal.isDate($0.day, inSameDayAs: d.day) } == true
-                                     ? Theme.dataStrong : Theme.data)
-            }
-            .chartXSelection(value: $selected)
-            // 不要纵轴刻度：具体数值看上方「今天 / 选中那天」，只留一条底线托住柱子
-            .chartYAxis {
-                AxisMarks(values: [0]) { _ in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(Theme.divider)
-                }
-            }
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: daily.count <= 7 ? 1 : 5)) { v in
-                    AxisValueLabel {
-                        if let d = v.as(Date.self) {
-                            Text(Fmt.shortDay(d)).font(.system(size: 11)).foregroundStyle(Theme.text2)
-                        }
-                    }
-                }
-            }
-            .environment(\.timeZone, Fmt.tz)
-            .frame(height: 110)
         }
     }
 }
@@ -1076,39 +1061,6 @@ struct IconButton: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .help(help)
-    }
-}
-
-struct TabBar: View {
-    @Binding var selection: ContentView.Tab
-    @Namespace private var ns
-
-    var body: some View {
-        HStack(spacing: 18) {
-            ForEach(ContentView.Tab.allCases, id: \.self) { t in
-                let on = selection == t
-                Button {
-                    withAnimation(.easeOut(duration: 0.18)) { selection = t }
-                } label: {
-                    VStack(spacing: 5) {
-                        Text(t.title)
-                            .font(.system(size: 12, weight: on ? .medium : .regular))
-                            .foregroundStyle(on ? Color.primary : Theme.text2)
-                        ZStack {
-                            Rectangle().fill(Color.clear).frame(height: 1.5)
-                            if on {
-                                Rectangle().fill(Theme.ink).frame(height: 1.5)
-                                    .matchedGeometryEffect(id: "tab", in: ns)
-                            }
-                        }
-                    }
-                    .fixedSize()
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-            Spacer()
-        }
     }
 }
 
