@@ -1,6 +1,6 @@
 cask "quotlet" do
-  version "0.6.0"
-  sha256 "c0426140faf2849919568eae3e9695cf4181c7428febebaec2be1f6bbb8f8cc2"
+  version "0.6.1"
+  sha256 "ee9b3d83b2d4ccf5b85c5bca74545839d85a87ce613ff28cafc8645db6bf0d68"
 
   url "https://github.com/tluo-github/quotlet/releases/download/v#{version}/Quotlet-#{version}.zip"
   name "Quotlet"

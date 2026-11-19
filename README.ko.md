@@ -37,6 +37,12 @@ Quotlet는 Claude Code와 Codex의 로컬 로그에서 토큰, 세션, 속도를
 
 ## 설치
 
+### AI에게 설치 부탁하기
+
+Mac에서 명령을 실행할 수 있는 AI 도우미에게 보내세요.
+
+> 이 Mac에 Quotlet을 설치해 주세요. https://quotlet.com 의 공식 안내와 https://github.com/tluo-github/quotlet 의 공식 릴리스를 사용하세요. macOS 14 이상인지 확인하고 Homebrew 또는 서명 및 공증된 패키지로 설치한 다음 Quotlet을 실행해 주세요.
+
 ### 다운로드
 
 [Releases](https://github.com/tluo-github/quotlet/releases/latest)에서 **Quotlet-<버전>.dmg**를 내려받아 열고 **Quotlet**를 '응용 프로그램'으로 드래그하세요. Apple 서명과 공증을 거쳤으므로 더블 클릭으로 바로 열립니다.

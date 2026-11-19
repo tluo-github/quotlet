@@ -27,7 +27,7 @@ struct SessionsTab: View {
     }
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             ChipPicker(options: Range.allCases.map { ($0, $0.title) }, selection: $range)
 
             if let l = store.local {
@@ -45,7 +45,7 @@ struct SessionsTab: View {
                 }
 
                 ForEach(groupByDay(list), id: \.day) { group in
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 0) {
                         HStack {
                             Text(Fmt.dayLabel(group.day, now: now)).font(Theme.label)
                             Spacer()
@@ -124,6 +124,8 @@ private struct SessionRow: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 6)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 7).fill(hovering ? Theme.hover : .clear))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }

@@ -45,7 +45,11 @@ const T = {
     't3.t': 'Your logs stay put', 't3.d': 'Sessions and tokens are read, never written, from the logs Claude Code and Codex already keep on your Mac.',
     't4.t': 'Signed and notarized', 't4.d': "The official download is Developer ID signed and notarized by Apple.",
     't5.t': 'Open source', 't5.d': 'MIT licensed. Every line is on GitHub, and you can build the app yourself in one command.',
-    'install.label': 'Install', 'install.title': 'Three ways in.',
+    'install.label': 'Install', 'install.title': "Install your way.",
+    "install.ai.t": "Ask your AI to install it",
+    "install.ai.d": "Copy the prompt into an AI assistant that can run commands on your Mac.",
+    "install.ai.copy": "Copy install prompt",
+    "install.ai.prompt": "Please install Quotlet on this Mac. The official website is https://quotlet.com and the source and official releases are at https://github.com/tluo-github/quotlet. Check that macOS is version 14 or later, then follow the official installation instructions using Homebrew or the signed and notarized release. Launch Quotlet after installing.",
     'install.dmg.t': 'Download', 'install.dmg.d': 'Open the DMG and drag Quotlet into Applications. Signed and notarized, so it opens with a double-click.',
     'install.src.t': 'Build it yourself', 'install.src.d': 'Needs the Xcode command line tools.',
     'install.r1': 'macOS 14 Sonoma or later, Apple silicon or Intel',
@@ -99,7 +103,11 @@ const T = {
     't3.t': '日志只读', 't3.d': '会话和 token 从 Claude Code 和 Codex 本来就存在你 Mac 上的日志里读，从来不写。',
     't4.t': '签名和公证', 't4.d': "官方下载包使用 Developer ID 签名，并经过 Apple 公证。",
     't5.t': '开源', 't5.d': 'MIT 协议，每一行代码都在 GitHub 上，一条命令就能自己编译。',
-    'install.label': '安装', 'install.title': '三种装法。',
+    'install.label': '安装', 'install.title': "选一种适合你的安装方式。",
+    "install.ai.t": "让你的 AI 帮你安装",
+    "install.ai.d": "复制这段提示词，发给能在 Mac 上执行命令的 AI 助手。",
+    "install.ai.copy": "复制安装提示词",
+    "install.ai.prompt": "请帮我在这台 Mac 上安装 Quotlet。官网是 https://quotlet.com，源码和官方安装包在 https://github.com/tluo-github/quotlet。先确认 macOS 为 14 或更新版本，再按官网说明使用 Homebrew 或已签名公证的正式安装包安装，完成后启动 Quotlet。",
     'install.dmg.t': '下载', 'install.dmg.d': '打开 DMG，把 Quotlet 拖进“应用程序”。已签名和公证，双击就能打开。',
     'install.src.t': '自己编译', 'install.src.d': '需要 Xcode 命令行工具。',
     'install.r1': 'macOS 14 Sonoma 或更新，Apple 芯片和 Intel 都支持',
@@ -153,7 +161,11 @@ const T = {
     't3.t': 'ログは読むだけ', 't3.d': 'セッションとトークンは、Claude Code と Codex がもともと Mac に保存しているログから読み取るだけで、書き込みはしません。',
     't4.t': '署名・公証済み', 't4.d': "公式ダウンロードは Developer ID で署名され、Apple の公証を受けています。",
     't5.t': 'オープンソース', 't5.d': 'MIT ライセンス。コードはすべて GitHub にあり、コマンド 1 つで自分でビルドできます。',
-    'install.label': 'インストール', 'install.title': '3 つの方法。',
+    'install.label': 'インストール', 'install.title': "使いやすい方法でインストール。",
+    "install.ai.t": "AI にインストールを頼む",
+    "install.ai.d": "Mac でコマンドを実行できる AI アシスタントに、この指示をコピーして送ってください。",
+    "install.ai.copy": "インストール指示をコピー",
+    "install.ai.prompt": "この Mac に Quotlet をインストールしてください。公式サイトは https://quotlet.com、ソースと公式リリースは https://github.com/tluo-github/quotlet です。macOS 14 以降であることを確認し、公式手順に沿って Homebrew または署名・公証済みのリリースを使ってインストールし、Quotlet を起動してください。",
     'install.dmg.t': 'ダウンロード', 'install.dmg.d': 'DMG を開いて Quotlet をアプリケーションフォルダにドラッグ。署名・公証済みなのでダブルクリックで開けます。',
     'install.src.t': '自分でビルド', 'install.src.d': 'Xcode コマンドラインツールが必要です。',
     'install.r1': 'macOS 14 Sonoma 以降、Apple シリコンまたは Intel',
@@ -207,7 +219,11 @@ const T = {
     't3.t': '로그는 읽기만', 't3.d': '세션과 토큰은 Claude Code와 Codex가 원래 Mac에 남기는 로그에서 읽기만 하고 쓰지 않습니다.',
     't4.t': '서명 및 공증', 't4.d': "공식 다운로드는 Developer ID로 서명되고 Apple 공증을 받았습니다.",
     't5.t': '오픈 소스', 't5.d': 'MIT 라이선스. 모든 코드가 GitHub에 있으며 명령 하나로 직접 빌드할 수 있습니다.',
-    'install.label': '설치', 'install.title': '세 가지 방법.',
+    'install.label': '설치', 'install.title': "편한 방법으로 설치하세요.",
+    "install.ai.t": "AI에게 설치 부탁하기",
+    "install.ai.d": "Mac에서 명령을 실행할 수 있는 AI 도우미에게 이 요청을 복사해 보내세요.",
+    "install.ai.copy": "설치 요청 복사",
+    "install.ai.prompt": "이 Mac에 Quotlet을 설치해 주세요. 공식 사이트는 https://quotlet.com, 소스와 공식 릴리스는 https://github.com/tluo-github/quotlet 입니다. macOS 14 이상인지 확인한 다음 공식 안내에 따라 Homebrew 또는 서명 및 공증된 공식 패키지로 설치하고 Quotlet을 실행해 주세요.",
     'install.dmg.t': '다운로드', 'install.dmg.d': 'DMG를 열고 Quotlet을 응용 프로그램 폴더로 드래그하세요. 서명 및 공증되어 더블 클릭으로 열립니다.',
     'install.src.t': '직접 빌드', 'install.src.d': 'Xcode 명령줄 도구가 필요합니다.',
     'install.r1': 'macOS 14 Sonoma 이상, Apple 실리콘 또는 Intel',
@@ -281,7 +297,7 @@ const systemDark = matchMedia('(prefers-color-scheme: dark)')
 function updateThemeColor() {
   const theme = document.documentElement.dataset.theme
   const isDark = theme === 'dark' || (!theme && systemDark.matches)
-  document.querySelector('meta[name="theme-color"]').content = isDark ? '#101915' : '#f7f6ef'
+  document.querySelector('meta[name="theme-color"]').content = isDark ? '#0b1018' : '#f5f7f9'
 }
 themePicker.value = document.documentElement.dataset.theme || 'system'
 themePicker.addEventListener('change', (event) => {
@@ -300,12 +316,12 @@ document.getElementById('lang').addEventListener('change', (e) => {
   apply(lang)
 })
 
-// 复制 brew 命令
-document.querySelectorAll('[data-copy]').forEach((b) => {
+// 按当前语言复制安装命令或 AI 提示词
+document.querySelectorAll('[data-copy], [data-copy-key]').forEach((b) => {
   b.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(b.dataset.copy) } catch { return }
+    try { await navigator.clipboard.writeText(b.dataset.copyKey ? T[lang][b.dataset.copyKey] : b.dataset.copy) } catch { return }
     const label = b.querySelector('.copy') || b
     label.textContent = T[lang]['cta.copied']
-    setTimeout(() => { label.textContent = T[lang]['cta.copy'] }, 1600)
+    setTimeout(() => { label.textContent = T[lang][b.dataset.i18n || 'cta.copy'] }, 1600)
   })
 })

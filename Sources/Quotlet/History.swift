@@ -992,13 +992,14 @@ private struct SessionsCard: View {
                     ScrollView(.horizontal) {
                         VStack(alignment: .leading, spacing: 8) {
                             header(columns)
-                            LazyVStack(spacing: 0) {
+                            VStack(alignment: .leading, spacing: 0) {
                                 ForEach(shown) { s in
                                     SessionTableRow(session: s, now: now, top: top, columns: columns)
                                 }
                             }
                         }
-                        .frame(width: columns.width)
+                        .frame(width: columns.width, alignment: .leading)
+                        .fixedSize(horizontal: true, vertical: true)
                     }
                     .frame(height: 32 + CGFloat(shown.count) * SessionColumns.rowHeight)
                 }
@@ -1033,7 +1034,7 @@ private struct SessionsCard: View {
         .font(.system(size: 11.5)).foregroundStyle(Theme.text2)
         .lineLimit(1)
         .padding(.horizontal, 6)
-        .frame(height: 24)
+        .frame(width: c.width, height: 24, alignment: .leading)
     }
 }
 
@@ -1083,7 +1084,7 @@ private struct SessionTableRow: View {
         .font(.system(size: 12).monospacedDigit())
         .foregroundStyle(Color.primary)
         .padding(.horizontal, 6)
-        .frame(height: SessionColumns.rowHeight)
+        .frame(width: c.width, height: SessionColumns.rowHeight, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? Theme.hover : .clear))
         .overlay(alignment: .top) { Hairline() }
         .contentShape(Rectangle())

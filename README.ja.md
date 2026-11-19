@@ -37,6 +37,12 @@ Quotlet は Claude Code と Codex のローカルログからトークン、セ�
 
 ## インストール
 
+### AI にインストールを頼む
+
+Mac でコマンドを実行できる AI アシスタントに送ってください。
+
+> この Mac に Quotlet をインストールしてください。https://quotlet.com の公式手順と https://github.com/tluo-github/quotlet の公式リリースを使ってください。macOS 14 以降であることを確認し、Homebrew または署名・公証済みのパッケージでインストールして、Quotlet を起動してください。
+
 ### ダウンロード
 
 [Releases](https://github.com/tluo-github/quotlet/releases/latest) から **Quotlet-<バージョン>.dmg** をダウンロードして開き、**Quotlet** を「アプリケーション」にドラッグします。Apple の署名と公証済みなので、ダブルクリックで開けます。

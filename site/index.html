@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quotlet — Claude and Codex quotas in your menu bar</title>
 <meta name="description" content="See Claude and Codex quotas, resets, and usage history right from your macOS menu bar. Free and open source.">
-<meta name="theme-color" content="#f7f6ef">
+<meta name="theme-color" content="#f5f7f9">
 <meta property="og:title" content="Quotlet — Claude and Codex quotas in your menu bar">
 <meta property="og:description" content="The 5-hour and weekly quotas, local token estimates, reset times and alerts. Free and open source.">
 <meta property="og:image" content="/assets/panel-en.webp">
@@ -59,6 +59,7 @@
       <div class="actions">
         <a class="button primary" data-download href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="cta.dmg">Download .dmg</a>
         <a class="button" href="#install">Homebrew</a>
+        <a class="ai-link" href="#install-ai" data-i18n="install.ai.t">Ask your AI to install it</a>
       </div>
       <p class="meta"><span data-i18n="hero.meta">macOS 14+ · Apple silicon &amp; Intel · signed &amp; notarized</span> · v{{VERSION}}</p>
     </div>
@@ -78,9 +79,9 @@
   </section>
 
   <div class="highlights">
-    <a href="#how"><span class="label">01</span><strong data-i18n="f3.t">Updates between refreshes</strong><span data-i18n="highlight.pace">Claude estimates follow new local tokens between API refreshes.</span></a>
-    <a href="#history"><span class="label">02</span><strong data-i18n="highlight.project">Usage by project</strong><span data-i18n="highlight.trend">Compare Claude Code and Codex tokens by project, session and date.</span></a>
-    <a href="#trust"><span class="label">03</span><strong data-i18n="highlight.local">Local by default</strong><span data-i18n="highlight.sync">Cloud sync is optional. Nothing is reported until you sign in and enable it.</span></a>
+    <a href="#how"><strong data-i18n="f3.t">Updates between refreshes</strong><span data-i18n="highlight.pace">Claude estimates follow new local tokens between API refreshes.</span></a>
+    <a href="#history"><strong data-i18n="highlight.project">Usage by project</strong><span data-i18n="highlight.trend">Compare Claude Code and Codex tokens by project, session and date.</span></a>
+    <a href="#trust"><strong data-i18n="highlight.local">Local by default</strong><span data-i18n="highlight.sync">Cloud sync is optional. Nothing is reported until you sign in and enable it.</span></a>
   </div>
 
   <section id="how" class="block">
@@ -96,11 +97,11 @@
       <span class="dim">Resets</span> <span class="time">Sunday 3:00</span>
 
 <span class="dim">Claude API refresh · every 10 minutes by default</span></pre>
-      <ol class="points">
+      <ul class="points">
         <li><b data-i18n="how.p1.t">Session files update the numbers.</b> <span data-i18n="how.p1.d">New usage records trigger an update in about a second. Codex quotas also come from its local logs.</span></li>
         <li><b data-i18n="how.p2.t">Estimates use observed changes.</b> <span data-i18n="how.p2.d">After at least two valid readings in the same window, new Claude tokens can estimate quota usage. The ≈ mark identifies estimates, and each API response corrects them. Models, caching and other devices affect accuracy.</span></li>
         <li><b data-i18n="how.p3.t">Alerts cover both providers.</b> <span data-i18n="how.p3.d">Alerts default to on at 90%, at 100% and after reset. Claude estimates can trigger them too. Allow macOS notifications when prompted.</span></li>
-      </ol>
+      </ul>
     </div>
   </section>
 
@@ -108,12 +109,12 @@
     <p class="label" data-i18n="features.label">What it does</p>
     <h2 data-i18n="features.title">Quotas, sessions and statistics in one panel.</h2>
     <div class="cards">
-      <article><p class="num">01 <span data-i18n="f1.k">Menu bar</span></p><h3 data-i18n="f1.t">Always in sight</h3><p data-i18n="f1.d">"5h 41% · Wk 62%" right in the menu bar, or just "41% 62%" if you like it compact.</p></article>
-      <article><p class="num">02 <span data-i18n="f2.k">Limits</span></p><h3 data-i18n="f2.t">Claude and Codex, side by side</h3><p data-i18n="f2.d">Enable Claude quota lookup for 5-hour, weekly and model-specific limits. Codex quotas come from local logs. A switch suggestion appears when one provider is near its limit and the other has room.</p></article>
-      <article><p class="num">03 <span data-i18n="f3.k">Estimates</span></p><h3 data-i18n="f3.t">Updates between refreshes</h3><p data-i18n="f3.d">After calibration, new local tokens update Claude quota estimates in the panel and menu bar. The ≈ mark stays until the next API reading corrects the value.</p></article>
-      <article><p class="num">04 <span data-i18n="f4.k">Today</span></p><h3 data-i18n="f4.t">Speed and cost</h3><p data-i18n="f4.d">Today's output and input tokens, requests, average and peak tok/s, and what it would cost at API prices.</p></article>
-      <article id="history"><p class="num">05 <span data-i18n="f5.k">History</span></p><h3 data-i18n="f5.t">A usage history window</h3><p data-i18n="f5.d">Use Sessions and Stats in the panel for recent activity. Open History for project trends, models, daily totals and CSV export. Daily totals stay on your Mac after old logs are cleared.</p></article>
-      <article><p class="num">06 <span data-i18n="f6.k">Alerts</span></p><h3 data-i18n="f6.t">Notifications, four languages</h3><p data-i18n="f6.d">90%, 100% and reset alerts default to on for Claude and Codex, including Claude estimates. Choose 80%, 90% or 95% for the early alert. Requires macOS notification permission.</p></article>
+      <article><p class="card-label" data-i18n="f1.k">Menu bar</p><h3 data-i18n="f1.t">Always in sight</h3><p data-i18n="f1.d">"5h 41% · Wk 62%" right in the menu bar, or just "41% 62%" if you like it compact.</p></article>
+      <article><p class="card-label" data-i18n="f2.k">Limits</p><h3 data-i18n="f2.t">Claude and Codex, side by side</h3><p data-i18n="f2.d">Enable Claude quota lookup for 5-hour, weekly and model-specific limits. Codex quotas come from local logs. A switch suggestion appears when one provider is near its limit and the other has room.</p></article>
+      <article><p class="card-label" data-i18n="f3.k">Estimates</p><h3 data-i18n="f3.t">Updates between refreshes</h3><p data-i18n="f3.d">After calibration, new local tokens update Claude quota estimates in the panel and menu bar. The ≈ mark stays until the next API reading corrects the value.</p></article>
+      <article><p class="card-label" data-i18n="f4.k">Today</p><h3 data-i18n="f4.t">Speed and cost</h3><p data-i18n="f4.d">Today's output and input tokens, requests, average and peak tok/s, and what it would cost at API prices.</p></article>
+      <article id="history"><p class="card-label" data-i18n="f5.k">History</p><h3 data-i18n="f5.t">A usage history window</h3><p data-i18n="f5.d">Use Sessions and Stats in the panel for recent activity. Open History for project trends, models, daily totals and CSV export. Daily totals stay on your Mac after old logs are cleared.</p></article>
+      <article><p class="card-label" data-i18n="f6.k">Alerts</p><h3 data-i18n="f6.t">Notifications, four languages</h3><p data-i18n="f6.d">90%, 100% and reset alerts default to on for Claude and Codex, including Claude estimates. Choose 80%, 90% or 95% for the early alert. Requires macOS notification permission.</p></article>
     </div>
     <div class="strip">
       <figure class="wide"><img data-shot="history" src="/assets/history-en.webp" width="1440" height="1054" loading="lazy" alt=""><figcaption data-i18n="shots.history">Usage history</figcaption></figure>
@@ -126,11 +127,11 @@
     <p class="label"><span data-i18n="cloud.label">Quotlet Cloud</span> <span class="soon" data-i18n="cloud.soon">Optional sync</span></p>
     <h2 data-i18n="cloud.title">The menu bar stays small. The details live on the web.</h2>
     <p class="lead" data-i18n="cloud.lead">Sign in and open app.quotlet.com for the full picture: limits from every Mac you use, session history, which sessions are running or waiting for you, and token trends — on your phone too.</p>
-    <ol class="points wide">
+    <ul class="points wide">
       <li><b data-i18n="cloud.p1.t">Optional, off by default.</b> <span data-i18n="cloud.p1.d">Local stats work offline. Enabling Claude quota lookup connects to Anthropic. Browser sign-in enables optional Cloud sync.</span></li>
       <li><b data-i18n="cloud.p2.t">Choose what to sync.</b> <span data-i18n="cloud.p2.d">Sync limits, token counts and session status. Session-title uploads have their own switch. Prompts and code stay on your Mac.</span></li>
       <li><b data-i18n="cloud.p3.t">Stop whenever you like.</b> <span data-i18n="cloud.p3.d">Sign out on the Mac, or remove it from the website, and it stops sending anything.</span></li>
-    </ol>
+    </ul>
   </section>
 
   <section id="trust" class="block">
@@ -138,18 +139,23 @@
     <h2 data-i18n="trust.title">Don't take our word for it. Check.</h2>
     <p class="lead" data-i18n="trust.lead">Local logs provide token statistics. Claude quota lookup and Cloud sync are optional connections you control in Settings.</p>
     <div class="cards">
-      <article><p class="num">01</p><h3 data-i18n="t1.t">Claude quota lookup is optional</h3><p data-i18n="t1.d">Enable it in Settings to read Claude Code credentials through macOS Keychain and request quotas from Anthropic. Use the dedicated authorization button if the system requires access.</p><code class="verify">git grep -n accessToken Sources/</code></article>
-      <article><p class="num">02</p><h3 data-i18n="t2.t">Connections you enable</h3><p data-i18n="t2.d">Local mode reads files on your Mac. Claude quota lookup uses api.anthropic.com. Cloud sign-in and sync use app.quotlet.com.</p><code class="verify">sudo lsof -i -a -c Quotlet</code></article>
-      <article><p class="num">03</p><h3 data-i18n="t3.t">Your logs stay put</h3><p data-i18n="t3.d">Sessions and tokens are read, never written, from the logs Claude Code and Codex already keep on your Mac.</p><code class="verify">ls ~/.claude/projects ~/.codex/sessions</code></article>
-      <article><p class="num">04</p><h3 data-i18n="t4.t">Signed and notarized</h3><p data-i18n="t4.d">The official download is Developer ID signed and notarized by Apple.</p><code class="verify">spctl -a -vv /Applications/Quotlet.app</code></article>
-      <article><p class="num">05</p><h3 data-i18n="t5.t">Open source</h3><p data-i18n="t5.d">MIT licensed. Every line is on GitHub, and you can build the app yourself in one command.</p><code class="verify">./build.sh install</code></article>
+      <article><h3 data-i18n="t1.t">Claude quota lookup is optional</h3><p data-i18n="t1.d">Enable it in Settings to read Claude Code credentials through macOS Keychain and request quotas from Anthropic. Use the dedicated authorization button if the system requires access.</p><code class="verify">git grep -n accessToken Sources/</code></article>
+      <article><h3 data-i18n="t2.t">Connections you enable</h3><p data-i18n="t2.d">Local mode reads files on your Mac. Claude quota lookup uses api.anthropic.com. Cloud sign-in and sync use app.quotlet.com.</p><code class="verify">sudo lsof -i -a -c Quotlet</code></article>
+      <article><h3 data-i18n="t3.t">Your logs stay put</h3><p data-i18n="t3.d">Sessions and tokens are read, never written, from the logs Claude Code and Codex already keep on your Mac.</p><code class="verify">ls ~/.claude/projects ~/.codex/sessions</code></article>
+      <article><h3 data-i18n="t4.t">Signed and notarized</h3><p data-i18n="t4.d">The official download is Developer ID signed and notarized by Apple.</p><code class="verify">spctl -a -vv /Applications/Quotlet.app</code></article>
+      <article><h3 data-i18n="t5.t">Open source</h3><p data-i18n="t5.d">MIT licensed. Every line is on GitHub, and you can build the app yourself in one command.</p><code class="verify">./build.sh install</code></article>
     </div>
   </section>
 
   <section id="install" class="block">
     <p class="label" data-i18n="install.label">Install</p>
-    <h2 data-i18n="install.title">Three ways in.</h2>
+    <h2 data-i18n="install.title">Install your way.</h2>
     <div class="ways">
+      <div id="install-ai">
+        <h3 data-i18n="install.ai.t">Ask your AI to install it</h3>
+        <p data-i18n="install.ai.d">Copy the prompt into an AI assistant that can run commands on your Mac.</p>
+        <button class="button" type="button" data-copy-key="install.ai.prompt" data-i18n="install.ai.copy">Copy install prompt</button>
+      </div>
       <div>
         <h3>Homebrew</h3>
         <pre><code>brew tap tluo-github/quotlet https://github.com/tluo-github/quotlet

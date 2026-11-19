@@ -41,6 +41,12 @@ Quotlet 默认从本机日志统计 Claude Code 和 Codex 的 token、会话、�
 
 ## 安装
 
+### 让 AI 帮你安装
+
+把下面这段话发给能在 Mac 上执行命令的 AI 助手。
+
+> 请帮我在这台 Mac 上安装 Quotlet。按官网 https://quotlet.com 的说明操作，官方安装包在 https://github.com/tluo-github/quotlet。先确认 macOS 为 14 或更新版本，再使用 Homebrew 或已签名公证的正式安装包安装，完成后启动 Quotlet。
+
 ### 下载
 
 从 [Releases](https://github.com/tluo-github/quotlet/releases/latest) 下载 **Quotlet-<版本>.dmg**，打开后把 **Quotlet** 拖进"应用程序"。app 已经过苹果签名和公证，双击就能打开。

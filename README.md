@@ -39,6 +39,12 @@ Quotlet defaults to local logs for Claude Code and Codex tokens, sessions, speed
 
 ## Install
 
+### Ask your AI to install
+
+Copy the following into an AI assistant that can run commands on your Mac.
+
+> Please install Quotlet on this Mac. Use the official instructions at https://quotlet.com and releases from https://github.com/tluo-github/quotlet. Confirm macOS 14 or later, install with Homebrew or the signed and notarized package, then launch Quotlet.
+
 ### Download
 
 Download **Quotlet-<version>.dmg** from [Releases](https://github.com/tluo-github/quotlet/releases/latest), open it and drag **Quotlet** into **Applications**. The app is signed and notarized by Apple, so it opens with a double-click.
