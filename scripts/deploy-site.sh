@@ -9,9 +9,9 @@ cd "$(dirname "$0")/.."
 OUT=build/site
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Resources/Info.plist)
 # 下载按钮直接指向最新发布的 DMG（改名前的版本叫 Quotabar-x.dmg，之后叫 Quotlet-x.dmg）；查不到就退回 Releases 页面
-DMG=$(gh release view --repo tluo-github/quotlet --json assets --jq '.assets[] | select(.name | endswith(".dmg")) | .url' 2>/dev/null | head -1)
+DMG=$(gh release view --repo tluo-github/quotlet --json assets --jq '.assets[] | select(.name | endswith(".dmg")) | .url' 2>/dev/null | head -1 || true)
 DMG=${DMG:-https://github.com/tluo-github/quotlet/releases/latest}
-RELEASE=$(gh release view --repo tluo-github/quotlet --json tagName --jq .tagName 2>/dev/null | sed 's/^v//')
+RELEASE=$(gh release view --repo tluo-github/quotlet --json tagName --jq .tagName 2>/dev/null | sed 's/^v//' || true)
 VERSION=${RELEASE:-$VERSION}
 
 rm -rf "$OUT"
@@ -22,6 +22,7 @@ sed -e "s|{{VERSION}}|${VERSION}|g" \
     -e "s|data-download href=\"https://github.com/tluo-github/quotlet/releases/latest\"|data-download href=\"${DMG}\"|g" \
     site/index.html > "$OUT/index.html"
 cp docs/icon.png "$OUT/assets/icon.png"
+cp Sources/Quotlet/ProviderAssets/*.png "$OUT/assets/"
 
 for lang in en zh ja ko; do
   for page in usage settings panel; do

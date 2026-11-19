@@ -24,8 +24,8 @@ extension Color {
 }
 
 enum Theme {
-    // 文字：正文用系统 primary；说明文字用接近正文的深炭灰（用户嫌灰字发虚：小字 + 浅灰在 Retina 上边缘不实）
-    // 对比度：浅色 ≈11:1，深色 ≈11:1；层级主要靠字号和字重区分，不靠把字调灰。
+    // 数据正文使用不透明前景色，保持菜单栏面板中的文字对比度。
+    static let text = Color.dynamic(light: 0x000000, dark: 0xF5F5F5)
     static let text2 = Color.dynamic(light: 0x383836, dark: 0xCFCFCB)
 
     // 中性色（略带暖调，避免纯灰的冷硬感）

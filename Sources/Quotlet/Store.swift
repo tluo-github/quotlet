@@ -7,6 +7,7 @@ final class Store: ObservableObject {
     @Published private(set) var usage: UsageSnapshot?
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var errorMessage: String?
+    @Published private(set) var needsCredentialAuthorization = false
     @Published private(set) var isLoading = false
     /// 上次失败是网络不通或被地区拒绝（403），界面上提示去设置代理
     @Published private(set) var needsProxyHint = false
@@ -15,6 +16,47 @@ final class Store: ObservableObject {
 
     @Published private(set) var local: LocalSnapshot?
     @Published private(set) var isScanning = false
+
+    /// 默认只读本机日志。只有用户主动开启后，才可读取 Claude 登录凭证并查询额度接口。
+    @Published var usageAPIEnabled: Bool {
+        didSet {
+            guard usageAPIEnabled != oldValue else { return }
+            quotaEstimator = ClaudeQuotaEstimator()
+            UserDefaults.standard.set(usageAPIEnabled, forKey: UsageAPI.enabledKey)
+            apiGeneration += 1
+            usageTask?.cancel()
+            connectionTask?.cancel()
+            isLoading = false
+            isTesting = false
+            errorMessage = nil
+            needsCredentialAuthorization = false
+            needsProxyHint = false
+            rateLimited = false
+            connectionTest = nil
+            if usageAPIEnabled {
+                if let (cached, date) = UsageCache.load() {
+                    usage = cached
+                    lastUpdated = date
+                    quotaEstimator.observe(cached, at: date, messages: [])
+                }
+                else { lastUpdated = nil }
+                refreshUsage()
+            } else {
+                usage = nil
+                Notifier.shared.cancelResetReminders(provider: "Claude")
+                lastUpdated = local == nil ? nil : Date()
+            }
+        }
+    }
+    private var apiGeneration = 0
+    private var usageTask: Task<Void, Never>?
+    private var connectionTask: Task<Void, Never>?
+    private var quotaEstimator = ClaudeQuotaEstimator()
+
+    func displayedClaudeUsage(now: Date) -> UsageSnapshot? {
+        guard let usage else { return nil }
+        return quotaEstimator.display(usage, messages: local?.messages ?? [], now: now)
+    }
 
     @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
 
@@ -50,7 +92,7 @@ final class Store: ObservableObject {
             if language.isEmpty { UserDefaults.standard.removeObject(forKey: "language") }
             else { UserDefaults.standard.set(language, forKey: "language") }
             // 额度标题是解析时按语言生成的：先用缓存按新语言重新解析，再去网络刷新
-            if let (cached, _) = UsageCache.load() { usage = cached }
+            if usageAPIEnabled, let (cached, _) = UsageCache.load() { usage = cached }
             refreshUsage()
         }
     }
@@ -81,10 +123,12 @@ final class Store: ObservableObject {
     /// 被限流后至少等这么久再试
     private let rateLimitBackoff: TimeInterval = 300
     private let retryInterval: TimeInterval = 60
-    /// 本地日志扫描间隔（秒）。有缓存，没变化的文件不会重读。
+    /// 文件监听之外的每分钟兜底扫描，兼顾跨日统计和文件事件丢失。
     private let scanInterval: TimeInterval = 60
 
     private let scanner = SessionScanner()
+    private var logWatcher: SessionLogWatcher?
+    private var pendingLocalRefresh = false
     /// 本机日志读最近多少天（会话列表、今天、按小时的图用；更早的历史看 HistoryStore 的每日汇总）
     static let scanDays = 31
 
@@ -95,9 +139,10 @@ final class Store: ObservableObject {
     init() {
         Network.registerDefaults()
         Notifier.registerDefaults()
-        UserDefaults.standard.register(defaults: ["refreshMinutes": 5])
+        UserDefaults.standard.register(defaults: ["refreshMinutes": 10])
         let d = UserDefaults.standard
-        refreshMinutes = Self.refreshChoices.contains(d.integer(forKey: "refreshMinutes")) ? d.integer(forKey: "refreshMinutes") : 5
+        usageAPIEnabled = UsageAPI.isEnabled()
+        refreshMinutes = Self.refreshChoices.contains(d.integer(forKey: "refreshMinutes")) ? d.integer(forKey: "refreshMinutes") : 10
         notifyLow = d.bool(forKey: Notifier.Key.low)
         notifyFull = d.bool(forKey: Notifier.Key.full)
         notifyThreshold = Int(Notifier.lowThreshold)
@@ -108,17 +153,19 @@ final class Store: ObservableObject {
         language = d.string(forKey: "language") ?? ""
         appearance = d.string(forKey: "appearance") ?? ""
         menuBarStyle = d.string(forKey: "menuBarStyle") ?? "full"
+        menuBarSource = d.string(forKey: "menuBarSource").flatMap(Source.init(rawValue:)) ?? .claude
         let initialAppearance = appearance
         DispatchQueue.main.async { Self.applyAppearance(initialAppearance) }
 
         // 先显示上次缓存的数据，再去网络刷新
-        if let (cached, date) = UsageCache.load() {
+        if usageAPIEnabled, let (cached, date) = UsageCache.load() {
             usage = cached
             lastUpdated = date
+            quotaEstimator.observe(cached, at: date, messages: [])
             CloudSync.shared.usageUpdated(cached, at: date)
         }
 
-        Notifier.shared.setup()
+        Notifier.shared.setup { [weak self] in self?.evaluateNotifications() }
         refreshAll()
         // 开发用：-openHistory YES 启动后直接打开用量历史窗口（截图检查用）
         if UserDefaults.standard.bool(forKey: "openHistory") {
@@ -134,6 +181,14 @@ final class Store: ObservableObject {
             Task { await Snapshot.run(store: self, dir: dir) }
             return
         }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        logWatcher = SessionLogWatcher(paths: [
+            home.appendingPathComponent(".claude/projects"),
+            CodexLogs.home.appendingPathComponent("sessions"),
+            CodexLogs.home.appendingPathComponent("archived_sessions"),
+            CodexLogs.home.appendingPathComponent("session_index.jsonl"),
+            CodexLogs.home.appendingPathComponent("external_agent_session_imports.json"),
+        ]) { [weak self] in self?.refreshLocal() }
         if !Showcase.enabled && !Demo.enabled {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LegacyApp.check() }
         }
@@ -150,20 +205,42 @@ final class Store: ObservableObject {
         didSet { UserDefaults.standard.set(menuBarStyle, forKey: "menuBarStyle") }
     }
 
-    /// 状态栏只在没有数据又出错时显示一个警告图标，其余时候只有文字，省地方。
-    var menuBarShowsWarning: Bool { usage == nil && errorMessage != nil }
+    @Published var menuBarSource: Source {
+        didSet { UserDefaults.standard.set(menuBarSource.rawValue, forKey: "menuBarSource") }
+    }
+
+    private var menuBarLimits: (session: LimitItem?, weekly: LimitItem?) {
+        if menuBarSource == .claude {
+            let displayed = displayedClaudeUsage(now: Date())
+            return (displayed?.session, displayed?.weekly)
+        }
+        let limits = codexLimits(now: Date())
+        return (limits.first { $0.kind == "session" }, limits.first { $0.kind == "weekly_all" })
+    }
+
+    var menuBarShowsWarning: Bool { menuBarSource == .claude && usage == nil && errorMessage != nil }
 
     var menuBarText: String {
-        guard let u = usage else { return errorMessage == nil ? "…" : "—" }
-        let s = u.session.map { "\(Int($0.percent))%" } ?? "—"
-        let w = u.weekly.map { "\(Int($0.percent))%" } ?? "—"
-        if menuBarStyle == "compact" { return "\(s) \(w)" }
-        return L("5h \(s) 周 \(w)", "5h \(s) Wk \(w)", ja: "5h \(s) 週 \(w)", ko: "5h \(s) 주 \(w)")
+        if menuBarSource == .claude, !usageAPIEnabled {
+            guard let local else { return "—" }
+            let start = Fmt.calendar.startOfDay(for: Date())
+            let total = local.messages.lazy.filter { $0.source == .claude && $0.ts >= start }.reduce(0) { $0 + $1.tokens.total }
+            return L("今日 \(Fmt.tokens(total))", "Today \(Fmt.tokens(total))", ja: "今日 \(Fmt.tokens(total))", ko: "오늘 \(Fmt.tokens(total))")
+        }
+        let limits = menuBarLimits
+        guard limits.session != nil || limits.weekly != nil else { return "—" }
+        let session = limits.session?.percentText ?? "—"
+        let weekly = limits.weekly?.percentText ?? "—"
+        if menuBarStyle == "compact" { return "\(session) \(weekly)" }
+        return L("5h \(session) 周 \(weekly)", "5h \(session) Wk \(weekly)",
+                 ja: "5h \(session) 週 \(weekly)", ko: "5h \(session) 주 \(weekly)")
     }
 
     var menuBarSymbol: String {
-        if usage == nil && errorMessage != nil { return "exclamationmark.triangle" }
-        let p = usage?.session?.percent ?? 0
+        if menuBarSource == .claude, !usageAPIEnabled { return "chart.bar" }
+        if menuBarShowsWarning { return "exclamationmark.triangle" }
+        let limits = menuBarLimits
+        let p = max(limits.session?.percent ?? 0, limits.weekly?.percent ?? 0)
         switch p {
         case 90...: return "gauge.with.dots.needle.100percent"
         case 60...: return "gauge.with.dots.needle.67percent"
@@ -175,6 +252,7 @@ final class Store: ObservableObject {
     /// 每分钟检查一次：上次出错（限流除外）就立即重试，否则到了设定的间隔再刷新。
     private var lastAttempt = Date.distantPast
     private func tick() {
+        guard usageAPIEnabled else { return }
         let sinceAttempt = Date().timeIntervalSince(lastAttempt)
         if rateLimited {
             if sinceAttempt >= max(apiInterval, rateLimitBackoff) - 1 { refreshUsage() }
@@ -189,6 +267,11 @@ final class Store: ObservableObject {
         refreshLocal()
     }
 
+    func authorizeClaudeQuota() {
+        guard needsCredentialAuthorization else { return }
+        refreshUsage(allowInteraction: true)
+    }
+
     /// 打开面板时调用：距上次刷新超过 2 分钟、且没被限流才重新请求接口，避免频繁打开面板时请求过多。
     func refreshIfStale() {
         let stale = lastUpdated.map { Date().timeIntervalSince($0) > 120 } ?? true
@@ -196,75 +279,117 @@ final class Store: ObservableObject {
         refreshLocal()
     }
 
-    func refreshUsage() {
+    private func refreshUsage(allowInteraction: Bool = false) {
+        guard usageAPIEnabled else { return }
         // -offline YES：截图 / 录屏时只用本地缓存，不请求接口
         if UserDefaults.standard.bool(forKey: "offline") { return }
         guard !isLoading else { return }
         isLoading = true
         lastAttempt = Date()
-        Task {
+        let generation = apiGeneration
+        usageTask = Task {
+            defer { if generation == apiGeneration { isLoading = false } }
             do {
-                let fresh = try await UsageAPI.fetch()
+                let fresh = try await UsageAPI.fetch(allowInteraction: allowInteraction)
+                let observedAt = Date()
+                let sample = await scanner.scan(days: Self.scanDays)
+                guard !Task.isCancelled, usageAPIEnabled, generation == apiGeneration else { return }
+                quotaEstimator.observe(fresh, at: observedAt, messages: sample.messages)
                 usage = fresh
-                lastUpdated = Date()
+                lastUpdated = observedAt
                 errorMessage = nil
+                needsCredentialAuthorization = false
                 rateLimited = false
                 needsProxyHint = false
                 Notifier.shared.evaluate(fresh)
                 CloudSync.shared.usageUpdated(fresh, at: Date())
                 HistoryStore.shared.record(provider: "claude", items: fresh.limits)
             } catch {
+                guard !Task.isCancelled, usageAPIEnabled, generation == apiGeneration else { return }
                 errorMessage = error.localizedDescription
+                if case UsageError.authorizationRequired = error { needsCredentialAuthorization = true }
+                else { needsCredentialAuthorization = false }
                 if case UsageError.http(429) = error { rateLimited = true } else { rateLimited = false }
                 switch error {
                 case UsageError.network, UsageError.forbidden: needsProxyHint = true
                 default: needsProxyHint = false
                 }
             }
-            isLoading = false
         }
     }
 
     func refreshLocal() {
-        guard !isScanning else { return }
+        guard !isScanning else {
+            pendingLocalRefresh = true
+            return
+        }
         isScanning = true
         Task {
             let snap = await scanner.scan(days: Self.scanDays)
             local = Demo.enabled ? Demo.anonymize(snap) : snap
             isScanning = false
+            if let displayed = displayedClaudeUsage(now: Date()) { Notifier.shared.evaluate(displayed) }
+            if !usageAPIEnabled { lastUpdated = Date() }
             HistoryStore.shared.merge(local ?? snap, scannedDays: Self.scanDays)   // 演示模式用匿名后的项目名
             if let c = snap.codexLimits { HistoryStore.shared.record(provider: "codex", items: c.limitItems(now: Date()), at: c.observedAt) }
-            // 网站还不区分来源，先只上报 Claude 的会话和 token
-            CloudSync.shared.localUpdated(snap.only(.claude))   // 演示模式下 CloudSync 自己不上报
+            if let c = snap.codexLimits {
+                Notifier.shared.evaluate(provider: "Codex", limits: c.limitItems(now: Date()))
+            }
+            CloudSync.shared.localUpdated(snap)   // 演示模式下 CloudSync 自己不上报
+            if pendingLocalRefresh {
+                pendingLocalRefresh = false
+                refreshLocal()
+            }
         }
     }
 
     /// 用当前代理设置请求一次额度接口（不回退直连），成功的话顺便更新数据。
     func testConnection() {
-        guard !isTesting else { return }
+        guard usageAPIEnabled, !isTesting else { return }
         isTesting = true
         connectionTest = nil
         let viaProxy = proxyEnabled
-        Task {
+        let generation = apiGeneration
+        connectionTask = Task {
+            defer { if generation == apiGeneration { isTesting = false } }
             let start = Date()
             do {
-                usage = try await UsageAPI.fetch(allowFallback: false)
-                lastUpdated = Date()
+                let fresh = try await UsageAPI.fetch(allowFallback: false)
+                let observedAt = Date()
+                let sample = await scanner.scan(days: Self.scanDays)
+                guard !Task.isCancelled, usageAPIEnabled, generation == apiGeneration else { return }
+                quotaEstimator.observe(fresh, at: observedAt, messages: sample.messages)
+                usage = fresh
+                lastUpdated = observedAt
                 errorMessage = nil
+                needsCredentialAuthorization = false
                 let ms = Int(Date().timeIntervalSince(start) * 1000)
                 connectionTest = (true, viaProxy ? L("通过代理连接成功，用时 \(ms) 毫秒", "Connected via proxy in \(ms) ms", ja: "プロキシ経由で接続しました（\(ms) ms）", ko: "프록시로 연결됨 (\(ms) ms)")
                                                    : L("直连成功，用时 \(ms) 毫秒", "Connected directly in \(ms) ms", ja: "直接接続しました（\(ms) ms）", ko: "직접 연결됨 (\(ms) ms)"))
             } catch {
+                guard !Task.isCancelled, usageAPIEnabled, generation == apiGeneration else { return }
+                if case UsageError.authorizationRequired = error { needsCredentialAuthorization = true }
                 connectionTest = (false, error.localizedDescription)
             }
-            isTesting = false
         }
     }
 
     private func notificationsChanged() {
         notificationTest = nil
-        if notifyLow || notifyFull || notifyReset { Notifier.shared.requestAuthorization() }
-        if let u = usage { Notifier.shared.evaluate(u) }   // 立刻按新设置重排「重置提醒」
+        if notifyLow || notifyFull || notifyReset {
+            Notifier.shared.requestAuthorization { [weak self] granted in
+                guard let self, granted else { return }
+                self.evaluateNotifications()
+            }
+            return
+        }
+        evaluateNotifications()
+    }
+
+    private func evaluateNotifications() {
+        let now = Date()
+        if let u = displayedClaudeUsage(now: now) { Notifier.shared.evaluate(u, now: now) }
+        if let c = local?.codexLimits { Notifier.shared.evaluate(provider: "Codex", limits: c.limitItems(now: now), now: now) }
     }
 
     func sendTestNotification() {

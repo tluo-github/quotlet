@@ -4,17 +4,30 @@ import SwiftUI
 
 // MARK: - 主面板
 
-/// 点状态栏打开的面板：只看配额（Claude、Codex 各一组）和「今天」的用量；会话和历史在「用量历史」窗口里。
 struct ContentView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var cloud = Cloud.shared
+    @State private var tab: Tab
     @State private var showSettings: Bool
     /// 整个面板的固定高度。高度若在面板打开后再变，macOS 会固定窗口底边，顶边就会离开状态栏出现空隙，
     /// 所以不做动态高度；内容放不下时在里面滚动。
-    static let panelHeight: CGFloat = 700
+    static let panelHeight: CGFloat = min(680, (NSScreen.main?.visibleFrame.height ?? 720) - 24)
 
-    init(startInSettings: Bool = false) {
+    init(startInSettings: Bool = false, initialTab: Tab = .usage) {
         _showSettings = State(initialValue: startInSettings)
+        _tab = State(initialValue: initialTab)
+    }
+
+    enum Tab: String, CaseIterable {
+        case usage, sessions, stats
+
+        var title: String {
+            switch self {
+            case .usage: return L("用量", "Usage", ja: "使用量", ko: "사용량")
+            case .sessions: return L("会话", "Sessions", ja: "セッション", ko: "세션")
+            case .stats: return L("统计", "Stats", ja: "統計", ko: "통계")
+            }
+        }
     }
 
     var body: some View {
@@ -23,11 +36,15 @@ struct ContentView: View {
                 SettingsView { showSettings = false }
                     .id(store.language)
             } else {
-                header
+                VStack(alignment: .leading, spacing: 8) {
+                    header
+                    ChipPicker(options: Tab.allCases.map { ($0, $0.title) }, selection: $tab)
+                }
                     .padding(.horizontal, 14)
                     .padding(.top, 12)
                     .padding(.bottom, 8)
 
+                Hairline()
                 TimelineView(.periodic(from: .now, by: 30)) { ctx in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
@@ -35,13 +52,18 @@ struct ContentView: View {
                                 Banner(text: L("登录失败：", "Sign-in failed: ", ja: "ログインに失敗しました：", ko: "로그인 실패: ") + err,
                                        actionTitle: L("重试", "Try again", ja: "再試行", ko: "다시 시도")) { cloud.signIn() }
                             }
-                            UsageTab(now: ctx.date, openSettings: { showSettings = true })
+                            switch tab {
+                            case .usage: UsageTab(now: ctx.date, openSettings: { showSettings = true })
+                            case .sessions: SessionsTab(now: ctx.date)
+                            case .stats: StatsTab(now: ctx.date)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 14)
-                        .padding(.bottom, 12)
+                        .padding(.vertical, 12)
                     }
                     .scrollIndicators(.automatic)
+                    .id(tab)
                 }
                 .frame(maxHeight: .infinity)
                 .id(store.language)   // 切换语言后整页重建，所有文字立即换成新语言
@@ -57,24 +79,12 @@ struct ContentView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text(L("用量", "Usage", ja: "使用量", ko: "사용량")).font(.system(size: 13, weight: .semibold))
-                .lineLimit(1).fixedSize()
-            if let level = overallLevel {
-                HealthBadge(level: level)
-            }
+            ChipPicker(options: [(Source.claude, "Claude"), (.codex, "Codex")], selection: $store.menuBarSource)
+                .fixedSize()
+                .help(L("切换状态栏显示的来源", "Switch the provider shown in the menu bar", ja: "メニューバーに表示するプロバイダーを切り替え", ko: "메뉴 막대에 표시할 제공자 전환"))
             Spacer(minLength: 4)
             AccountButton(cloud: cloud)
         }
-    }
-
-    /// Claude 和 Codex 所有额度里最差的状态
-    private var overallLevel: Level? {
-        let items = (store.usage?.limits ?? []) + store.codexLimits(now: Date())
-        guard !items.isEmpty else { return nil }
-        let levels = items.map { Level(percent: $0.percent, severity: $0.severity) }
-        if levels.contains(.critical) { return .critical }
-        if levels.contains(.warning) { return .warning }
-        return .normal
     }
 
     private var footer: some View {
@@ -240,7 +250,7 @@ struct UsageTab: View {
                                ko: "Anthropic에 연결할 수 없습니다. 프록시가 필요하다면 설정에서 네트워크 프록시를 켜세요."),
                        actionTitle: L("去设置代理", "Set up proxy", ja: "プロキシを設定", ko: "프록시 설정"),
                        action: openSettings)
-            } else if let err = store.errorMessage {
+            } else if !store.needsCredentialAuthorization, let err = store.errorMessage {
                 if store.usage != nil, let t = store.lastUpdated {
                     // 数据不到 10 分钟就不打扰；超过 10 分钟才提示数据过时
                     if now.timeIntervalSince(t) > 600 {
@@ -252,9 +262,13 @@ struct UsageTab: View {
                 }
             }
 
-            let claude = store.usage?.limits ?? []
+            let claudeUsage = store.displayedClaudeUsage(now: Date())
+            let claude = claudeUsage?.limits ?? []
             let codex = store.codexLimits(now: now)
             let all = claude + codex
+            if let advice = Advice.make(claude: claude, codex: codex, now: now) {
+                AdviceCard(advice: advice)
+            }
             // 左边短标签、右边倒计时都按最长的那个定宽，Claude 和 Codex 两组的进度条一样长、左端对齐
             let labelWidth = all.map {
                 ceil(($0.shortLabel as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium)]).width)
@@ -263,83 +277,62 @@ struct UsageTab: View {
                 ceil(($0.countdown(now: now) as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .regular)]).width) + 1
             }.max() ?? 40
 
-            if let advice = Advice.make(claude: claude, codex: codex, now: now) {
-                AdviceCard(advice: advice)
-            }
-
-            if let u = store.usage {
-                ProviderGroup(name: "Claude", plan: u.plan.map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() },
-                              dot: Theme.data, limits: u.limits, now: now,
-                              labelWidth: labelWidth, countdownWidth: countdownWidth) {
-                    // 用量来源压成一行；额外用量只在开启时显示
-                    let sources = sourcesLine(u.breakdown)
-                    let extra = u.extra.flatMap { $0.enabled ? $0 : nil }
-                    if sources != nil || extra != nil {
-                        VStack(alignment: .leading, spacing: 3) {
-                            if let sources { Text(sources) }
-                            if let e = extra {
-                                let used = e.used.map { String(format: "$%.2f", $0) } ?? "—"
-                                let limit = e.limit.map { String(format: "$%.2f", $0) } ?? "—"
-                                Text(L("额外用量：本月 \(used) / \(limit)", "Extra usage: \(used) of \(limit) this month", ja: "追加使用量：今月 \(used) / \(limit)", ko: "추가 사용량: 이번 달 \(used) / \(limit)"))
-                            }
-                        }
-                        .font(Theme.caption)
-                        .foregroundStyle(Theme.text2)
-                    }
+            if !store.usageAPIEnabled {
+                HStack(spacing: 8) {
+                    Image(systemName: "doc.text.magnifyingglass").foregroundStyle(Theme.text2)
+                    Text(L("本地统计模式", "Local stats mode", ja: "ローカル集計モード", ko: "로컬 통계 모드")).font(Theme.bodyMedium)
+                    Spacer()
+                    ChipButton(title: L("设置", "Settings", ja: "設定", ko: "설정"), action: openSettings)
                 }
+                .help(L("只读本机日志，不读取 Claude 登录凭证。可在设置中开启 Claude 额度接口。", "Reads local logs without accessing your Claude login. Enable the Claude quota API in Settings if needed.", ja: "Claude のログイン情報を読まずにローカルログを集計します。使用枠 API は設定で有効にできます。", ko: "Claude 로그인 정보에 접근하지 않고 로컬 로그만 읽습니다. 한도 API는 설정에서 켤 수 있습니다."))
+            } else if let u = claudeUsage {
+                ProviderGroup(name: "Claude", plan: u.plan.map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() },
+                              source: .claude, limits: u.limits, now: now,
+                              labelWidth: labelWidth, countdownWidth: countdownWidth)
             } else if store.isLoading {
                 LoadingState(text: L("正在获取用量…", "Loading usage…", ja: "使用量を取得中…", ko: "사용량을 불러오는 중…"))
             }
 
             if !codex.isEmpty, let c = store.local?.codexLimits {
-                Hairline()
-                ProviderGroup(name: "Codex", plan: c.planTitle, dot: Theme.codex, limits: codex, now: now,
-                              labelWidth: labelWidth, countdownWidth: countdownWidth) {
-                    // Codex 的额度只在用 Codex 时写进日志，隔久了说明一下是什么时候的数
-                    if now.timeIntervalSince(c.observedAt) > 600 {
-                        Text(L("记录于 \(Fmt.sessionTime(c.observedAt, now: now))，用 Codex 时更新",
-                               "As of \(Fmt.sessionTime(c.observedAt, now: now)); updates when you use Codex",
-                               ja: "\(Fmt.sessionTime(c.observedAt, now: now)) 時点 · Codex を使うと更新",
-                               ko: "\(Fmt.sessionTime(c.observedAt, now: now)) 기준 · Codex 사용 시 갱신"))
-                            .font(Theme.caption).foregroundStyle(Theme.text2)
-                    }
-                }
+                if !claude.isEmpty { Hairline() }
+                ProviderGroup(name: "Codex", plan: c.planTitle, source: .codex, limits: codex, now: now,
+                              labelWidth: labelWidth, countdownWidth: countdownWidth)
+            } else if store.menuBarSource == .codex {
+                Text(L("还没有 Codex 额度记录。使用一次 Codex 后会自动更新。",
+                       "No Codex quota recorded yet. It updates after you use Codex.",
+                       ja: "Codex の使用枠は未記録です。使用すると自動更新されます。",
+                       ko: "아직 Codex 한도 기록이 없습니다. Codex를 사용하면 자동으로 업데이트됩니다."))
+                    .font(Theme.caption).foregroundStyle(Theme.text2)
             }
 
-            if let l = store.local {
+            if let local = store.local {
                 Hairline()
-                TodayBlock(local: l, now: now)
+                TodayBlock(local: local, now: now)
             }
+
         }
     }
 }
 
-/// 一个工具的配额：标题行（名字 · 套餐 · 最紧张那条的百分比）+ 每条额度一行
-struct ProviderGroup<Footer: View>: View {
+/// 一个工具的配额：标题行（名字 · 套餐）+ 每条额度一行
+struct ProviderGroup: View {
     let name: String
     let plan: String?
-    let dot: Color
+    let source: Source
     let limits: [LimitItem]
     let now: Date
     let labelWidth: CGFloat
     let countdownWidth: CGFloat
-    @ViewBuilder var footer: Footer
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 7) {
-                Circle().fill(dot).frame(width: 8, height: 8)
+                brandIcon.frame(width: 19, height: 19).accessibilityHidden(true)
                 Text(name).font(.system(size: 13, weight: .semibold))
                 if let plan {
                     Text(plan).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.text2)
                         .padding(.horizontal, 6).padding(.vertical, 1)
                         .background(RoundedRectangle(cornerRadius: 4).fill(Theme.hover))
-                }
-                Spacer()
-                if let worst = limits.max(by: { $0.percent < $1.percent }) {
-                    Text(Fmt.percent(worst.percent))
-                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(Level(percent: worst.percent, severity: worst.severity).color)
                 }
             }
             VStack(alignment: .leading, spacing: 12) {
@@ -347,70 +340,18 @@ struct ProviderGroup<Footer: View>: View {
                     LimitRow(item: item, now: now, labelWidth: labelWidth, countdownWidth: countdownWidth)
                 }
             }
-            footer
         }
     }
-}
 
-/// 额度告急时的建议：一边快用完、另一边还宽裕，就建议先用另一边
-struct Advice {
-    let title: String
-    let badge: String
-    let reason: String
-
-    static func make(claude: [LimitItem], codex: [LimitItem], now: Date) -> Advice? {
-        guard !claude.isEmpty, !codex.isEmpty else { return nil }
-        func tight(_ items: [LimitItem]) -> LimitItem? {
-            items.first { Pace(item: $0, now: now)?.emptyIn != nil || $0.percent >= 90 }
+    @ViewBuilder private var brandIcon: some View {
+        let url = Bundle.main.url(forResource: source.rawValue, withExtension: "png")
+            ?? (Bundle.main.bundleURL.pathExtension == "app" ? nil : Bundle.module.url(forResource: source.rawValue, withExtension: "png"))
+        if let url, let image = NSImage(contentsOf: url) {
+            Image(nsImage: image).resizable().scaledToFit()
+        } else {
+            Image(systemName: source == .claude ? "sun.max.fill" : "terminal.fill")
+                .foregroundStyle(source == .claude ? Theme.data : Theme.codex)
         }
-        func roomy(_ items: [LimitItem]) -> Bool { items.allSatisfy { $0.percent < 70 && Pace(item: $0, now: now)?.emptyIn == nil } }
-        func left(_ items: [LimitItem]) -> String {
-            let five = items.first { $0.kind == "session" } ?? items[0]
-            let pct = Fmt.percent(max(0, 100 - five.percent))
-            return five.kind == "session"
-                ? L("5 小时还剩 \(pct)", "\(pct) left in 5h", ja: "5 時間枠の残り \(pct)", ko: "5시간 \(pct) 남음")
-                : L("还剩 \(pct)", "\(pct) left", ja: "残り \(pct)", ko: "\(pct) 남음")
-        }
-        func why(_ name: String, _ it: LimitItem) -> String {
-            var text: String
-            if let t = Pace(item: it, now: now)?.emptyIn {
-                text = L("\(name) \(it.shortLabel)约 \(Fmt.duration(t))后用完", "\(name) \(it.shortLabel) runs out in ~\(Fmt.duration(t))",
-                         ja: "\(name) \(it.shortLabel)は約\(Fmt.duration(t))で上限", ko: "\(name) \(it.shortLabel) 약 \(Fmt.duration(t)) 후 소진")
-            } else {
-                text = L("\(name) \(it.shortLabel)已用 \(Fmt.percent(it.percent))", "\(name) \(it.shortLabel) at \(Fmt.percent(it.percent))",
-                         ja: "\(name) \(it.shortLabel)は \(Fmt.percent(it.percent)) 使用", ko: "\(name) \(it.shortLabel) \(Fmt.percent(it.percent)) 사용")
-            }
-            if let r = it.resetsAt {
-                text += L("，\(Fmt.resetMoment(r, now: now)) 重置", " · resets \(Fmt.resetMoment(r, now: now))",
-                          ja: " · \(Fmt.resetMoment(r, now: now)) にリセット", ko: " · \(Fmt.resetMoment(r, now: now)) 재설정")
-            }
-            return text
-        }
-        if let t = tight(claude), roomy(codex) {
-            return Advice(title: L("先用 Codex", "Use Codex for now", ja: "今は Codex を", ko: "지금은 Codex"), badge: left(codex), reason: why("Claude", t))
-        }
-        if let t = tight(codex), roomy(claude) {
-            return Advice(title: L("先用 Claude", "Use Claude for now", ja: "今は Claude を", ko: "지금은 Claude"), badge: left(claude), reason: why("Codex", t))
-        }
-        return nil
-    }
-}
-
-struct AdviceCard: View {
-    let advice: Advice
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(advice.title).font(.system(size: 13, weight: .semibold))
-                Text(advice.badge).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(Theme.live)
-            }
-            Text(advice.reason).font(Theme.caption).foregroundStyle(Theme.text2)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12).padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 9).fill(Theme.live.opacity(0.10)))
     }
 }
 
@@ -423,60 +364,48 @@ struct TodayBlock: View {
     var body: some View {
         let start = Fmt.calendar.startOfDay(for: now)
         let st = UsageStats.of(local.messages.lazy.filter { $0.ts >= start })
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text(L("今天", "Today", ja: "今日", ko: "오늘")).font(.system(size: 13, weight: .semibold))
-                Text(local.hasCodex ? "Claude Code + Codex" : "Claude Code").font(Theme.caption).foregroundStyle(Theme.text2)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Text(L("今天", "Today", ja: "今日", ko: "오늘"))
+                    .font(.system(size: 13, weight: .semibold))
+                Text(local.hasCodex ? "Claude Code + Codex" : "Claude Code")
+                    .font(.system(size: 10.5))
                     .lineLimit(1)
-                Spacer()
+                Spacer(minLength: 4)
                 Button {
                     HistoryWindowController.shared.show(store: store)
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock.arrow.circlepath").font(.system(size: 11, weight: .medium))
-                        Text(L("历史", "History", ja: "履歴", ko: "기록"))
-                    }
-                    .font(.system(size: 12, weight: .medium))
-                    .padding(.horizontal, 9).padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.hover))
-                    .contentShape(Rectangle())
+                    Label(L("历史", "History", ja: "履歴", ko: "기록"), systemImage: "clock.arrow.circlepath")
+                        .font(Theme.caption)
+                        .padding(.vertical, 3)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .fixedSize()
                 .help(L("打开用量历史窗口", "Open usage history", ja: "使用量の履歴を開く", ko: "사용량 기록 열기"))
             }
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-                GridRow {
-                    TodayTile(label: L("输出", "Output", ja: "出力", ko: "출력"), value: Fmt.tokens(st.tokens.output))
-                    TodayTile(label: L("输入（含缓存）", "Input (incl. cache)", ja: "入力（キャッシュ含む）", ko: "입력(캐시 포함)"), value: Fmt.tokens(st.inputAll))
-                }
-                GridRow {
-                    TodayTile(label: L("请求", "Requests", ja: "リクエスト", ko: "요청"), value: Fmt.count(st.requests))
-                    TodayTile(label: L("平均速度", "Avg speed", ja: "平均速度", ko: "평균 속도"),
-                              value: st.avgSpeed.map { Fmt.speed($0) } ?? "—", unit: st.avgSpeed == nil ? nil : "tok/s")
-                }
-            }
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(spacing: 2) {
+                TodayMetricRow(label: L("输出", "Output", ja: "出力", ko: "출력"), value: Fmt.tokens(st.tokens.output))
+                TodayMetricRow(label: L("输入", "Input", ja: "入力", ko: "입력"), value: Fmt.tokens(st.inputAll),
+                               detail: L("含缓存", "incl. cache", ja: "キャッシュ含む", ko: "캐시 포함"))
+                Hairline().padding(.vertical, 5)
+                TodayMetricRow(label: L("请求", "Requests", ja: "リクエスト", ko: "요청"), value: Fmt.count(st.requests))
+                TodayMetricRow(label: L("平均速度", "Avg speed", ja: "平均速度", ko: "평균 속도"),
+                               value: st.avgSpeed.map { Fmt.speed($0) } ?? "—", unit: st.avgSpeed == nil ? nil : "tok/s")
                 if st.peakSpeed > 0, let at = st.peakAt {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(L("今日峰值", "Today's peak", ja: "今日のピーク", ko: "오늘 최고")).foregroundStyle(Theme.text2)
-                        Spacer()
-                        Text("\(Fmt.speed(st.peakSpeed)) tok/s").fontWeight(.semibold).foregroundStyle(Theme.warning)
-                        Text("· \(Fmt.time(at))").foregroundStyle(Theme.text2)
-                    }
+                    TodayMetricRow(label: L("峰值速度", "Peak speed", ja: "最高速度", ko: "최고 속도"),
+                                   value: Fmt.speed(st.peakSpeed), unit: "tok/s", detail: Fmt.time(at))
                 }
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(L("今日费用", "Today's cost", ja: "今日の費用", ko: "오늘 비용")).foregroundStyle(Theme.text2)
-                    Text(L("API 等值", "API equiv.", ja: "API 換算", ko: "API 환산")).font(.system(size: 10.5)).foregroundStyle(Theme.text2)
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(Theme.hover))
-                    Spacer()
-                    Text((st.unpricedRequests > 0 ? "≥" : "") + Fmt.money(st.cost)).fontWeight(.semibold)
-                    Image(systemName: "info.circle").font(.system(size: 11)).foregroundStyle(Theme.text2)
-                        .help(costHelp(st))
-                }
+                TodayMetricRow(label: L("费用", "Cost", ja: "費用", ko: "비용"),
+                               value: (st.unpricedRequests > 0 ? "≥" : "") + Fmt.money(st.cost),
+                               detail: L("API 等值", "API equiv.", ja: "API 換算", ko: "API 환산"), help: costHelp(st))
             }
-            .font(.system(size: 12).monospacedDigit())
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.group))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.hairline, lineWidth: 1))
         }
+        .foregroundStyle(Theme.text)
     }
 
     private func costHelp(_ st: UsageStats) -> String {
@@ -494,33 +423,34 @@ struct TodayBlock: View {
     }
 }
 
-struct TodayTile: View {
+/// 今日汇总统一为左侧标签、右侧数值；说明和时间跟随标签，不打断数值对齐。
+private struct TodayMetricRow: View {
     let label: String
     let value: String
     var unit: String? = nil
+    var detail: String? = nil
+    var help: String? = nil
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(label).font(Theme.caption).foregroundStyle(Theme.text2).lineLimit(1)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value).font(.system(size: 17, weight: .semibold).monospacedDigit())
-                if let unit { Text(unit).font(Theme.caption).foregroundStyle(Theme.text2) }
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(label).font(Theme.caption)
+            if let detail {
+                Text(detail).font(.system(size: 10.5))
             }
+            if let help {
+                Image(systemName: "info.circle").font(.system(size: 10))
+                    .help(help)
+            }
+            Spacer(minLength: 8)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value).font(.system(size: 12.5, weight: .medium).monospacedDigit())
+                if let unit { Text(unit).font(.system(size: 10.5)) }
+            }
+            .fixedSize()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
     }
-}
-
-/// 「本周用量全部来自 Claude Code」或「本周来源：Claude Code 70% · 网页 / App 聊天 30%」
-func sourcesLine(_ rows: [BreakdownRow]) -> String? {
-    let used = rows.filter { $0.percent > 0 }.sorted { $0.percent > $1.percent }
-    guard !used.isEmpty else { return nil }
-    if used.count == 1, used[0].percent >= 99.5 {
-        let n = used[0].name
-        return L("本周用量全部来自 \(n)", "All usage this week is from \(n)", ja: "今週の使用はすべて \(n) から", ko: "이번 주 사용량은 모두 \(n)에서 발생")
-    }
-    let parts = used.map { "\($0.name) \(Fmt.percent($0.percent))" }.joined(separator: " · ")
-    return L("本周来源：", "This week: ", ja: "今週の内訳：", ko: "이번 주 사용처: ") + parts
 }
 
 extension LimitItem {
@@ -552,43 +482,7 @@ extension LimitItem {
     }
 }
 
-/// 按窗口里到现在为止的平均速度估算：重置时会用到多少，会不会在重置前用完。
-/// 只用当前百分比和已过时间，不需要历史数据；窗口刚开始时速度不准，不预测。
-struct Pace {
-    let projected: Double          // 照这个速度，重置时用到的百分比
-    let emptyIn: TimeInterval?     // 会提前用完时：还有多久用完
-    let early: TimeInterval?       // 比重置早多久
-
-    init?(item: LimitItem, now: Date) {
-        guard let r = item.resetsAt, let w = item.windowLength else { return nil }
-        let left = r.timeIntervalSince(now)
-        let elapsed = w - left
-        guard left > 0, elapsed > 60, item.percent > 0, item.percent < 100 else { return nil }
-        // 已过时间不到窗口的 10% 且用量不到 10%：样本太少，不预测
-        guard elapsed >= w * 0.1 || item.percent >= 10 else { return nil }
-        let rate = item.percent / elapsed
-        projected = item.percent + rate * left
-        if projected >= 100 {
-            let t = (100 - item.percent) / rate
-            emptyIn = t
-            early = left - t
-        } else {
-            emptyIn = nil
-            early = nil
-        }
-    }
-
-    var level: Level {
-        if emptyIn != nil { return .critical }
-        if projected >= 85 { return .warning }
-        return .normal
-    }
-}
-
-/// 一条额度的紧凑显示（标签按最长的定宽，几行的进度条和数字对齐）：
-///   5 小时  ━━━━━━━│──  54%  3小时14分
-///           今天 10:30 重置 · 届时约 72%
-///           约 46分钟后用完，比重置早 39分钟      ← 只在会提前用完时出现，红色
+/// 额度只显示百分比、倒计时和重置时刻。
 struct LimitRow: View {
     let item: LimitItem
     let now: Date
@@ -604,7 +498,6 @@ struct LimitRow: View {
     }
 
     var body: some View {
-        let pace = Pace(item: item, now: now)
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 10) {
                 Text(item.shortLabel)
@@ -615,10 +508,16 @@ struct LimitRow: View {
                 // 竖线 = 时间已过多少
                 UsageBar(fraction: item.percent / 100, marker: elapsed, color: level.color, height: 6)
                     .help(elapsedText ?? "")
-                Text(Fmt.percent(item.percent))
+                Text(item.percentText)
                     .font(.system(size: 13, weight: .semibold).monospacedDigit())
                     .foregroundStyle(level.color)
-                    .frame(width: 40, alignment: .trailing)
+                    .frame(width: 64, alignment: .trailing)
+                    .help(item.isEstimated
+                          ? L("根据本机新增 token 估算，下次接口刷新时校正。",
+                              "Estimated from new local tokens. Corrected at the next quota refresh.",
+                              ja: "ローカルの新規トークンから推定。次の API 更新時に補正します。",
+                              ko: "새 로컬 토큰으로 추정합니다. 다음 한도 새로 고침 시 보정됩니다.")
+                          : item.title)
                 Text(item.countdown(now: now))
                     .font(Theme.caption.monospacedDigit())
                     .foregroundStyle(Theme.text2)
@@ -626,47 +525,25 @@ struct LimitRow: View {
                     .frame(width: countdownWidth, alignment: .trailing)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                if let r = item.resetsAt {
-                    resetLine(r, pace: pace)
-                        .foregroundStyle(Theme.text2)
-                }
-                if item.percent >= 100, let r = item.resetsAt, r > now {
-                    Text(L("已用完，\(Fmt.duration(r.timeIntervalSince(now)))后恢复",
-                           "Used up · back in \(Fmt.duration(r.timeIntervalSince(now)))",
-                           ja: "上限に到達 · \(Fmt.duration(r.timeIntervalSince(now)))後に回復",
-                           ko: "모두 사용 · \(Fmt.duration(r.timeIntervalSince(now))) 후 복구"))
-                        .foregroundStyle(Theme.critical)
-                } else if let pace, let t = pace.emptyIn, let e = pace.early {
-                    Text(L("约 \(Fmt.duration(t))后用完，比重置早 \(Fmt.duration(e))",
-                           "Empty in ~\(Fmt.duration(t)) — \(Fmt.duration(e)) before reset",
-                           ja: "約\(Fmt.duration(t))で上限 · リセットの\(Fmt.duration(e))前",
-                           ko: "약 \(Fmt.duration(t)) 후 소진 · 재설정 \(Fmt.duration(e)) 전"))
-                        .fontWeight(.medium)
-                        .foregroundStyle(Theme.critical)
-                }
+            if let r = item.resetsAt {
+                resetLine(r)
+                    .foregroundStyle(Theme.text2)
+                    .font(Theme.caption)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, labelWidth + 10)
             }
-            .font(Theme.caption)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.leading, labelWidth + 10)
         }
     }
 
-    /// 「今天 10:30 重置 · 届时约 72%」，重置时间用蓝色半粗体；会提前用完时不写届时多少（下一行红字说明）
-    private func resetLine(_ r: Date, pace: Pace?) -> Text {
+    private func resetLine(_ r: Date) -> Text {
         if r <= now { return Text(Fmt.countdown(to: r, now: now)) }
-        let moment = Text(Fmt.resetMoment(r, now: now)).fontWeight(.semibold).foregroundColor(Theme.time)
+        let moment = Text(Fmt.resetMoment(r, now: now))
         var line: Text
         switch Lang.current {
         case .zh: line = moment + Text(" 重置")
         case .en: line = Text("Resets ") + moment
         case .ja: line = moment + Text(" にリセット")
         case .ko: line = moment + Text(" 재설정")
-        }
-        if let pace, pace.emptyIn == nil, item.percent < 100 {
-            let p = Fmt.percent(pace.projected)
-            let s = Text(L(" · 届时约 \(p)", " · ~\(p) by then", ja: " · その時点で約 \(p)", ko: " · 그때 약 \(p)"))
-            line = line + (pace.level == .normal ? s : s.foregroundColor(pace.level.color))
         }
         return line
     }
@@ -717,6 +594,8 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 11) {
                     generalGroup
                     RowDivider()
+                    apiGroup
+                    RowDivider()
                     cloudGroup
                     RowDivider()
                     proxyGroup
@@ -758,6 +637,12 @@ struct SettingsView: View {
             }
             RowGap()
             SettingsRow {
+                SettingsLabel(L("状态栏来源", "Menu bar source", ja: "メニューバーのソース", ko: "메뉴 막대 소스"), icon: "menubar.rectangle")
+                Spacer()
+                ChipPicker(options: [(Source.claude, "Claude"), (.codex, "Codex")], selection: $store.menuBarSource)
+            }
+            RowGap()
+            SettingsRow {
                 SettingsLabel(L("状态栏", "Menu bar", ja: "メニューバー", ko: "메뉴 막대"), icon: "menubar.rectangle")
                 Spacer(minLength: 4)
                 ChipPicker(options: [("full", L("5h 41% 周 62%", "5h 41% Wk 62%", ja: "5h 41% 週 62%", ko: "5h 41% 주 62%")),
@@ -773,11 +658,41 @@ struct SettingsView: View {
                 ChipPicker(options: Store.refreshChoices.map { ($0, "\($0)") }, selection: $store.refreshMinutes, compact: true)
                     .fixedSize()
             }
+            .disabled(!store.usageAPIEnabled)
+            .opacity(store.usageAPIEnabled ? 1 : 0.45)
             RowGap()
             SettingsRow {
                 SettingsLabel(L("开机自动启动", "Launch at login", ja: "ログイン時に起動", ko: "로그인 시 실행"), icon: "power")
                 Spacer()
                 SwitchToggle(isOn: Binding(get: { store.launchAtLogin }, set: { store.setLaunchAtLogin($0) }))
+            }
+        }
+    }
+
+    private var apiGroup: some View {
+        SettingsGroup(title: L("额度接口", "Quota API", ja: "使用枠 API", ko: "한도 API"),
+                      footer: L("默认关闭。开启后使用本机 Claude Code 登录凭证向 Anthropic 查询 5 小时和每周额度及重置时间。",
+                                "Off by default. Uses your local Claude Code login to fetch 5-hour and weekly quotas and reset times from Anthropic.",
+                                ja: "既定ではオフです。ローカルの Claude Code ログイン情報を使い、Anthropic から 5 時間・週間の使用枠とリセット時刻を取得します。",
+                                ko: "기본값은 꺼짐입니다. 로컬 Claude Code 로그인 정보로 Anthropic에서 5시간 및 주간 한도와 재설정 시간을 조회합니다.")) {
+            SettingsRow {
+                SettingsLabel(L("查询 Claude 额度", "Fetch Claude quota", ja: "Claude の使用枠を取得", ko: "Claude 한도 조회"), icon: "network")
+                Spacer()
+                SwitchToggle(isOn: $store.usageAPIEnabled)
+            }
+            if store.needsCredentialAuthorization {
+                RowGap()
+                SettingsRow {
+                    SettingsLabel(L("读取 Claude Code 凭证", "Read Claude Code credentials", ja: "Claude Code の認証情報を読む", ko: "Claude Code 자격 증명 읽기"), icon: "key")
+                    Spacer(minLength: 4)
+                    ChipButton(title: L("允许钥匙串访问", "Allow Keychain Access", ja: "アクセスを許可", ko: "키체인 접근 허용")) { store.authorizeClaudeQuota() }
+                        .fixedSize()
+                        .disabled(store.isLoading)
+                        .help(L("授权方式由系统和 Claude Code 凭证的保护设置决定，可能需要输入登录钥匙串密码。",
+                                "Authentication follows the system and the credential's protection settings. Your login Keychain password may be required.",
+                                ja: "認証方法はシステムと認証情報の保護設定で決まります。ログインキーチェーンのパスワードが必要な場合があります。",
+                                ko: "인증 방식은 시스템과 자격 증명의 보호 설정에 따라 결정됩니다. 로그인 키체인 암호가 필요할 수 있습니다."))
+                }
             }
         }
     }
@@ -857,7 +772,11 @@ struct SettingsView: View {
                 Spacer()
                 if store.isTesting { ProgressView().controlSize(.mini) }
                 ChipButton(title: L("测试", "Test", ja: "テスト", ko: "테스트")) { store.testConnection() }
-                    .disabled(store.isTesting)
+                    .disabled(store.isTesting || !store.usageAPIEnabled)
+            }
+            if !store.usageAPIEnabled {
+                Text(L("开启 Claude 额度接口后可测试连接。", "Enable the Claude quota API to test the connection.", ja: "接続テストには Claude 使用枠 API を有効にしてください。", ko: "연결을 테스트하려면 Claude 한도 API를 켜세요."))
+                    .font(Theme.caption).foregroundStyle(Theme.text2)
             }
         }
     }
@@ -1158,9 +1077,9 @@ struct SectionBlock<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(title).font(Theme.label).foregroundStyle(Theme.text2)
+                Text(title).font(Theme.label)
                 if let note {
-                    Text(note).font(Theme.caption).foregroundStyle(Theme.text2)
+                    Text(note).font(Theme.caption)
                 }
             }
             content
@@ -1211,7 +1130,7 @@ struct LoadingState: View {
     var body: some View {
         HStack(spacing: 8) {
             if spinner { ProgressView().controlSize(.small) }
-            Text(text).font(Theme.body).foregroundStyle(Theme.text2)
+            Text(text).font(Theme.body)
         }
         .frame(maxWidth: .infinity, minHeight: 160)
     }

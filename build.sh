@@ -30,6 +30,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/$APP_NAME" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
+cp Sources/Quotlet/ProviderAssets/*.png "$APP/Contents/Resources/"
 [[ -f Resources/AppIcon.icns ]] && cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
 # Signing identity: Developer ID for releases when available, ad-hoc otherwise.

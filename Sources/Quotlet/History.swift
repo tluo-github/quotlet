@@ -152,6 +152,7 @@ struct HistoryData {
     let total: UsageStats
     let previous: UsageStats           // 上一段同样长的时间，用来比较
     let projects: [(name: String, tokens: Int)]
+    let projectUsage: [String: [Date: [Source: TokenCount]]]
     let models: [(name: String, source: String, output: Int, speed: Double?)]
     let activeDays: Int
 
@@ -180,6 +181,11 @@ struct HistoryData {
         var total = UsageStats()
         var previous = UsageStats()
         var projects: [String: Int] = [:]
+        var projectUsage: [String: [Date: [Source: TokenCount]]] = [:]
+        func addProject(_ name: String, _ date: Date, _ source: Source, _ tokens: TokenCount) {
+            projects[name, default: 0] += tokens.total
+            projectUsage[name, default: [:]][date, default: [:]][source, default: TokenCount()] += tokens
+        }
         var models: [String: (source: String, output: Int, timedOut: Int, secs: Double)] = [:]
         var active = Set<String>()
         let prevStart = cal.date(byAdding: .day, value: -max(1, days), to: start)!
@@ -192,7 +198,7 @@ struct HistoryData {
                 let k = bucketStart(m.ts)
                 if m.source == .claude { buckets[k]?.claude.add(m) } else { buckets[k]?.codex.add(m) }
                 total.add(m)
-                projects[m.project, default: 0] += m.tokens.total
+                addProject(m.project, k, m.source, m.tokens)
                 var e = models[m.model] ?? (m.source.rawValue, 0, 0, 0)
                 e.output += m.tokens.output
                 if let (out, d) = m.timed { e.timedOut += out; e.secs += d }
@@ -208,7 +214,7 @@ struct HistoryData {
                 let k = bucketStart(d)
                 if r.source == Source.claude.rawValue { buckets[k]?.claude.add(row: r) } else { buckets[k]?.codex.add(row: r) }
                 total.add(row: r)
-                projects[r.project, default: 0] += r.total
+                if let provider = Source(rawValue: r.source) { addProject(r.project, k, provider, r.tokens) }
                 var e = models[r.model] ?? (r.source, 0, 0, 0)
                 e.output += r.output
                 e.timedOut += r.timedOutput
@@ -229,7 +235,8 @@ struct HistoryData {
             range: range, start: start, end: end, unit: unit,
             buckets: buckets.values.sorted { $0.start < $1.start },
             total: total, previous: previous,
-            projects: projects.map { ($0.key, $0.value) }.sorted { $0.1 > $1.1 }.prefix(6).map { $0 },
+            projects: projects.map { ($0.key, $0.value) }.sorted { $0.1 == $1.1 ? $0.0 < $1.0 : $0.1 > $1.1 },
+            projectUsage: projectUsage,
             models: models.map { (Fmt.modelName($0.key), $0.value.source, $0.value.output,
                                   $0.value.secs > 0 ? Double($0.value.timedOut) / $0.value.secs : nil) }
                 .filter { $0.2 > 0 }.sorted { $0.2 > $1.2 }.prefix(6).map { $0 },
@@ -260,6 +267,7 @@ struct HistoryView: View {
                     }
                     KPIRow(data: data)
                     UsageChartCard(data: data, metric: $metric)
+                    ProjectTrendCard(data: data, now: ctx.date)
                     HStack(alignment: .top, spacing: 16) {
                         QuotaHistoryCard(readings: history.quota, now: ctx.date)
                             .frame(maxWidth: .infinity)
@@ -673,21 +681,226 @@ private struct QuotaHistoryCard: View {
     }
 }
 
-/// 按项目 / 按模型（模型带平均速度）
+private struct ProjectTrendCard: View {
+    let data: HistoryData
+    let now: Date
+    @State private var hiddenProjects: Set<String> = []
+    @State private var outputOnly = false
+    @State private var cursor: Date? = Snapshot.projectCursor
+
+    private struct Series: Identifiable {
+        let id: String
+        let color: Color
+        let dash: [CGFloat]
+        let points: [Date: Int]
+        var total: Int { points.values.reduce(0, +) }
+    }
+
+    var body: some View {
+        let series = data.projects.enumerated().map { index, project in
+            let colors: [Color] = [Theme.data, Theme.codex, Theme.live, .purple, .pink, .teal, .indigo, .brown]
+            let dashes: [[CGFloat]] = [[], [5, 3], [2, 3], [6, 3, 2, 3]]
+            return Series(id: project.name, color: colors[index % colors.count],
+                          dash: dashes[(index / colors.count) % dashes.count],
+                          points: data.projectUsage[project.name, default: [:]].mapValues { bucket in
+                              bucket.values.reduce(0) { $0 + (outputOnly ? $1.output : $1.total) }
+                          })
+        }
+        let visible = series.filter { !hiddenProjects.contains($0.id) }
+        let dates = data.buckets.map(\.start).filter { $0 <= now }
+        let picked = cursor.flatMap { target -> Date? in
+            return dates.min { abs($0.timeIntervalSince(target)) < abs($1.timeIntervalSince(target)) }
+        }
+
+        return Card {
+            if !series.isEmpty {
+                HStack(alignment: .top, spacing: 20) {
+                    trend(visible, dates: dates, picked: picked)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    projectPicker(series, picked: picked)
+                        .frame(width: 245, alignment: .leading)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    title
+                    Text(L("这段时间没有项目用量", "No project usage in this period", ja: "この期間のプロジェクト使用量はありません", ko: "이 기간에는 프로젝트 사용량이 없습니다"))
+                        .font(Theme.caption).foregroundStyle(Theme.text2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .onChange(of: data.start) { cursor = nil }
+        .onChange(of: data.end) { cursor = nil }
+    }
+
+    private var title: some View {
+        Text(L("项目用量趋势", "Project usage trend", ja: "プロジェクト使用量の推移", ko: "프로젝트 사용량 추이"))
+            .font(.system(size: 14, weight: .semibold))
+    }
+
+    private func projectPicker(_ series: [Series], picked: Date?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(L("按项目", "By project", ja: "プロジェクト別", ko: "프로젝트별"))
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                Button(L("全选", "Select all", ja: "すべて選択", ko: "모두 선택")) { hiddenProjects.removeAll() }
+                    .disabled(!series.contains { hiddenProjects.contains($0.id) })
+                Button(L("清空", "Clear", ja: "選択解除", ko: "선택 해제")) { hiddenProjects.formUnion(series.map(\.id)) }
+                    .disabled(series.allSatisfy { hiddenProjects.contains($0.id) })
+            }
+            .buttonStyle(.borderless)
+            .font(Theme.caption)
+            Text(picked.map(dateLabel) ?? L("所选时间内用量", "Usage in this period", ja: "選択期間の使用量", ko: "선택 기간의 사용량"))
+                .font(Theme.caption).foregroundStyle(Theme.text2)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    ForEach(series) { item in
+                        let selected = !hiddenProjects.contains(item.id)
+                        let value = picked.map { item.points[$0, default: 0] } ?? item.total
+                        Button {
+                            if selected { hiddenProjects.insert(item.id) }
+                            else { hiddenProjects.remove(item.id) }
+                        } label: {
+                            HStack(spacing: 7) {
+                                Image(systemName: selected ? "checkmark.square.fill" : "square").foregroundStyle(selected ? item.color : Theme.text2)
+                                Text(projectName(item.id)).lineLimit(1).truncationMode(.middle)
+                                Spacer(minLength: 4)
+                                Text(Fmt.tokens(value)).monospacedDigit().fixedSize()
+                            }
+                            .font(Theme.caption)
+                            .foregroundStyle(selected ? Color.primary : Theme.text2)
+                            .padding(5)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                        .help(projectName(item.id))
+                    }
+                }
+            }
+            .frame(height: 185)
+        }
+    }
+
+    private func trend(_ series: [Series], dates: [Date], picked: Date?) -> some View {
+        let labelStep = max(1, (dates.count + 6) / 7)
+        let axisDates = dates.enumerated().filter {
+            $0.offset.isMultiple(of: labelStep) || $0.offset == dates.count - 1
+        }.map(\.element)
+        let maximum = series.compactMap { $0.points.values.max() }.max() ?? 0
+        let limit = Int(niceMax(Double(maximum), minimum: 2))
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                title
+                Spacer()
+                Picker(L("用量口径", "Token metric", ja: "トークン指標", ko: "토큰 지표"), selection: $outputOnly) {
+                    Text(L("总 token", "Total tokens", ja: "合計トークン", ko: "총 토큰")).tag(false)
+                    Text(L("输出", "Output", ja: "出力", ko: "출력")).tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+            }
+            Text(L("已选 \(series.count) 个项目", "\(series.count) projects selected", ja: "\(series.count) 件を選択中", ko: "프로젝트 \(series.count)개 선택"))
+                .font(Theme.caption).foregroundStyle(Theme.text2)
+            Chart {
+                ForEach(series) { item in
+                    ForEach(dates, id: \.self) { date in
+                        let count = item.points[date, default: 0]
+                        LineMark(x: .value("Date", date), y: .value("Tokens", count), series: .value("Project", item.id))
+                            .lineStyle(StrokeStyle(lineWidth: 2, dash: item.dash))
+                            .foregroundStyle(item.color)
+                        if picked == date || dates.count == 1 {
+                            PointMark(x: .value("Date", date), y: .value("Tokens", count))
+                                .foregroundStyle(item.color)
+                        }
+                    }
+                }
+                if let picked, !series.isEmpty {
+                    RuleMark(x: .value("Date", picked))
+                        .foregroundStyle(Theme.marker.opacity(0.5))
+                        .annotation(position: .top, alignment: .leading, spacing: 8,
+                                    overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                            hoverDetails(series, at: picked)
+                        }
+                }
+            }
+            .chartLegend(.hidden)
+            .chartXSelection(value: $cursor)
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    Color.clear.contentShape(Rectangle())
+                        .onContinuousHover { phase in
+                            switch phase {
+                            case .active(let location):
+                                if let anchor = proxy.plotFrame {
+                                    let plot = geometry[anchor]
+                                    cursor = plot.contains(location) ? proxy.value(atX: location.x - plot.minX, as: Date.self) : nil
+                                } else { cursor = nil }
+                            case .ended: cursor = nil
+                            }
+                        }
+                }
+            }
+            .chartXScale(range: .plotDimension(startPadding: 18, endPadding: 22))
+            .chartYScale(domain: 0...limit)
+            .chartYAxis {
+                AxisMarks(position: .leading, values: [0, limit / 2, limit]) { tick in
+                    AxisGridLine().foregroundStyle(Theme.divider)
+                    AxisValueLabel { if let count = tick.as(Int.self) { Text(Fmt.tokens(count)) } }
+                }
+            }
+            .chartXAxis {
+                AxisMarks(values: axisDates) { tick in
+                    AxisValueLabel { if let date = tick.as(Date.self) { Text(dateLabel(date)) } }
+                }
+            }
+            .environment(\.timeZone, Fmt.tz)
+            .frame(height: 185)
+            .overlay {
+                if series.isEmpty {
+                    Text(L("选择项目后显示趋势", "Select projects to show trends", ja: "プロジェクトを選択すると推移を表示します", ko: "프로젝트를 선택하면 추이가 표시됩니다"))
+                        .font(Theme.caption).foregroundStyle(Theme.text2)
+                }
+            }
+        }
+    }
+
+    private func hoverDetails(_ series: [Series], at date: Date) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(dateLabel(date)).fontWeight(.semibold)
+            ForEach(series) { item in
+                HStack(spacing: 7) {
+                    Circle().fill(item.color).frame(width: 7, height: 7)
+                    Text(projectName(item.id)).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 12)
+                    Text(Fmt.tokens(item.points[date, default: 0])).monospacedDigit()
+                }
+            }
+        }
+        .font(Theme.caption)
+        .foregroundStyle(Color.primary)
+        .padding(10)
+        .frame(width: 220)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.surface))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.divider))
+        .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+        .allowsHitTesting(false)
+    }
+
+    private func dateLabel(_ date: Date) -> String { data.unit == .hour ? Fmt.time(date) : Fmt.shortDay(date) }
+    private func projectName(_ name: String) -> String {
+        name.isEmpty ? L("未知项目", "Unknown project", ja: "不明なプロジェクト", ko: "알 수 없는 프로젝트") : name
+    }
+}
+
 private struct BreakdownCard: View {
     let data: HistoryData
 
     var body: some View {
         Card {
             VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(L("按项目", "By project", ja: "プロジェクト別", ko: "프로젝트별")).font(.system(size: 14, weight: .semibold))
-                    if data.projects.isEmpty { empty }
-                    let top = data.projects.first?.tokens ?? 1
-                    ForEach(data.projects, id: \.name) { p in
-                        BarRow(name: p.name, value: Fmt.tokens(p.tokens), fraction: Double(p.tokens) / Double(max(1, top)), color: Theme.ink)
-                    }
-                }
                 VStack(alignment: .leading, spacing: 8) {
                     Text(L("按模型 · 输出和速度", "By model · output & speed", ja: "モデル別 · 出力と速度", ko: "모델별 · 출력과 속도")).font(.system(size: 14, weight: .semibold))
                     if data.models.isEmpty { empty }
@@ -724,15 +937,40 @@ private struct BarRow: View {
     }
 }
 
-/// 会话表：状态、标题、项目、来源、模型、开始、时长、速度、token
+/// 会话表共享列宽：标题、项目和用量进度条按比例分配剩余空间。
+private struct SessionColumns {
+    let width: CGFloat
+    static let spacing: CGFloat = 10
+    static let rowHeight: CGFloat = 32
+    let status: CGFloat = 62
+    let source: CGFloat = 86
+    let model: CGFloat = 100
+    let start: CGFloat = 54
+    let duration: CGFloat = 64
+    let input: CGFloat = 60
+    let output: CGFloat = 60
+    let cache: CGFloat = 68
+    let total: CGFloat = 74
+
+    init(availableWidth: CGFloat) { width = max(1180, availableWidth) }
+    private var flexible: CGFloat {
+        width - status - source - model - start - duration - input - output - cache - total - Self.spacing * 11 - 12
+    }
+    var title: CGFloat { flexible * 0.42 }
+    var project: CGFloat { flexible * 0.23 }
+    var progress: CGFloat { flexible * 0.35 }
+}
+
 private struct SessionsCard: View {
     let sessions: [SessionSummary]
     let now: Date
     @Binding var search: String
+    @State private var availableWidth: CGFloat = 1180
 
     var body: some View {
         let shown = Array(sessions.prefix(200))
-        let top = shown.map(\.tokens.total).max() ?? 1
+        let top = sessions.map { $0.tokens.total }.max() ?? 1
+        let columns = SessionColumns(availableWidth: availableWidth)
         Card {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 12) {
@@ -745,35 +983,57 @@ private struct SessionsCard: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 220)
                 }
-                header
                 if shown.isEmpty {
                     Text(L("这段时间没有会话（会话列表只看最近 31 天的本机日志）", "No sessions in this period (the list covers the last 31 days of local logs)",
                            ja: "この期間のセッションはありません（直近 31 日のローカルログが対象）", ko: "이 기간에 세션이 없습니다(최근 31일 로컬 로그 기준)"))
                         .font(.system(size: 12)).foregroundStyle(Theme.text2)
                         .padding(.vertical, 12)
-                }
-                LazyVStack(spacing: 0) {
-                    ForEach(shown) { s in
-                        SessionTableRow(session: s, now: now, top: top)
+                } else {
+                    ScrollView(.horizontal) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            header(columns)
+                            LazyVStack(spacing: 0) {
+                                ForEach(shown) { s in
+                                    SessionTableRow(session: s, now: now, top: top, columns: columns)
+                                }
+                            }
+                        }
+                        .frame(width: columns.width)
                     }
+                    .frame(height: 32 + CGFloat(shown.count) * SessionColumns.rowHeight)
+                }
+            }
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { availableWidth = proxy.size.width }
+                        .onChange(of: proxy.size.width) { _, width in availableWidth = width }
                 }
             }
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            Text(L("状态", "Status", ja: "状態", ko: "상태")).frame(width: 64, alignment: .leading)
-            Text(L("会话", "Session", ja: "セッション", ko: "세션")).frame(maxWidth: .infinity, alignment: .leading)
-            Text(L("项目", "Project", ja: "プロジェクト", ko: "프로젝트")).frame(width: 110, alignment: .leading)
-            Text(L("来源", "Source", ja: "ソース", ko: "소스")).frame(width: 96, alignment: .leading)
-            Text(L("模型", "Model", ja: "モデル", ko: "모델")).frame(width: 100, alignment: .leading)
-            Text(L("开始", "Started", ja: "開始", ko: "시작")).frame(width: 86, alignment: .leading)
-            Text(L("时长", "Duration", ja: "時間", ko: "시간")).frame(width: 76, alignment: .leading)
-            Text("token").frame(width: 130, alignment: .trailing)
+    private func header(_ c: SessionColumns) -> some View {
+        HStack(spacing: SessionColumns.spacing) {
+            Text(L("状态", "Status", ja: "状態", ko: "상태")).frame(width: c.status, alignment: .leading)
+            Text(L("会话", "Session", ja: "セッション", ko: "세션")).frame(width: c.title, alignment: .leading)
+            Text(L("项目", "Project", ja: "プロジェクト", ko: "프로젝트")).frame(width: c.project, alignment: .leading)
+            Text(L("来源", "Source", ja: "ソース", ko: "소스")).frame(width: c.source, alignment: .leading)
+            Text(L("模型", "Model", ja: "モデル", ko: "모델")).frame(width: c.model, alignment: .leading)
+            Text(L("开始", "Started", ja: "開始", ko: "시작")).frame(width: c.start, alignment: .leading)
+            Text(L("时长", "Duration", ja: "時間", ko: "시간")).frame(width: c.duration, alignment: .leading)
+            Text(L("用量对比", "Usage comparison", ja: "使用量の比較", ko: "사용량 비교")).frame(width: c.progress, alignment: .leading)
+            Text(L("输入", "Input", ja: "入力", ko: "입력")).frame(width: c.input, alignment: .trailing)
+                .help(L("输入 token，不含缓存", "Input tokens, excluding cache", ja: "キャッシュを除く入力トークン", ko: "캐시를 제외한 입력 토큰"))
+            Text(L("输出", "Output", ja: "出力", ko: "출력")).frame(width: c.output, alignment: .trailing)
+            Text(L("缓存", "Cache", ja: "キャッシュ", ko: "캐시")).frame(width: c.cache, alignment: .trailing)
+                .help(L("缓存读取 + 缓存写入 token", "Cache read + cache write tokens", ja: "キャッシュ読み取り + 書き込みトークン", ko: "캐시 읽기 + 쓰기 토큰"))
+            Text(L("总 token", "Total tokens", ja: "合計トークン", ko: "총 토큰")).frame(width: c.total, alignment: .trailing)
         }
         .font(.system(size: 11.5)).foregroundStyle(Theme.text2)
+        .lineLimit(1)
         .padding(.horizontal, 6)
+        .frame(height: 24)
     }
 }
 
@@ -781,46 +1041,66 @@ private struct SessionTableRow: View {
     let session: SessionSummary
     let now: Date
     let top: Int
+    let columns: SessionColumns
     @State private var hovering = false
 
     var body: some View {
         let s = session
+        let c = columns
         let active = s.isActive(now: now)
-        HStack(spacing: 10) {
+        HStack(spacing: SessionColumns.spacing) {
             HStack(spacing: 5) {
                 Circle().fill(active ? Theme.live : Theme.inkSoft).frame(width: 7, height: 7)
                 Text(active ? L("进行中", "Active", ja: "実行中", ko: "진행 중") : L("已结束", "Ended", ja: "終了", ko: "종료"))
                     .foregroundStyle(active ? Theme.live : Theme.text2)
             }
             .font(.system(size: 12, weight: .medium))
-            .frame(width: 64, alignment: .leading)
-            Text(s.title).font(.system(size: 12.5, weight: .medium)).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-            Text(s.project).lineLimit(1).truncationMode(.middle).frame(width: 110, alignment: .leading)
+            .frame(width: c.status, alignment: .leading)
+            Text(s.title).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+                .frame(width: c.title, alignment: .leading).help(s.title)
+            Text(s.project).lineLimit(1).truncationMode(.middle)
+                .frame(width: c.project, alignment: .leading).help(s.project)
             HStack(spacing: 5) {
                 Circle().fill(s.source == .codex ? Theme.codex : Theme.data).frame(width: 7, height: 7)
                 Text(s.source.title).lineLimit(1)
             }
-            .frame(width: 96, alignment: .leading)
-            Text(Fmt.modelName(s.mainModel)).lineLimit(1).frame(width: 100, alignment: .leading)
-            Text(Fmt.sessionTime(s.start, now: now)).frame(width: 86, alignment: .leading)
-            Text(Fmt.compactDuration(s.end.timeIntervalSince(s.start))).lineLimit(1).frame(width: 76, alignment: .leading)
-            HStack(spacing: 8) {
-                UsageBar(fraction: Double(s.tokens.total) / Double(max(1, top)), marker: nil,
-                         color: s.source == .codex ? Theme.codex : Theme.data, height: 4)
-                    .frame(width: 56)
-                Text(Fmt.tokens(s.tokens.total)).frame(width: 64, alignment: .trailing)
-            }
-            .frame(width: 130, alignment: .trailing)
+            .frame(width: c.source, alignment: .leading)
+            Text(Fmt.modelName(s.mainModel)).lineLimit(1).frame(width: c.model, alignment: .leading).help(Fmt.modelName(s.mainModel))
+            Text(Fmt.sessionTime(s.start, now: now)).lineLimit(1).frame(width: c.start, alignment: .leading)
+            Text(Fmt.compactDuration(s.end.timeIntervalSince(s.start))).lineLimit(1).frame(width: c.duration, alignment: .leading)
+            UsageBar(fraction: Double(s.tokens.total) / Double(max(1, top)), marker: nil,
+                     color: s.source == .codex ? Theme.codex : Theme.data, height: 4)
+                .frame(width: c.progress)
+                .help(L("相对当前列表中最大会话的总 token 用量", "Total tokens relative to the largest session in this list", ja: "この一覧の最大セッションに対する合計トークン", ko: "현재 목록의 최대 세션 대비 총 토큰 사용량"))
+            tokenCell(s.tokens.input, width: c.input)
+            tokenCell(s.tokens.output, width: c.output)
+            tokenCell(s.tokens.cacheRead + s.tokens.cacheWrite, width: c.cache)
+                .help(L("读取 \(Fmt.count(s.tokens.cacheRead)) · 写入 \(Fmt.count(s.tokens.cacheWrite))", "Read \(Fmt.count(s.tokens.cacheRead)) · write \(Fmt.count(s.tokens.cacheWrite))",
+                        ja: "読み取り \(Fmt.count(s.tokens.cacheRead)) · 書き込み \(Fmt.count(s.tokens.cacheWrite))", ko: "읽기 \(Fmt.count(s.tokens.cacheRead)) · 쓰기 \(Fmt.count(s.tokens.cacheWrite))"))
+            tokenCell(s.tokens.total, width: c.total)
+                .fontWeight(.medium)
         }
         .font(.system(size: 12).monospacedDigit())
         .foregroundStyle(Color.primary)
-        .padding(.horizontal, 6).padding(.vertical, 7)
+        .padding(.horizontal, 6)
+        .frame(height: SessionColumns.rowHeight)
         .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? Theme.hover : .clear))
         .overlay(alignment: .top) { Hairline() }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .help(Fmt.modelName(s.mainModel) + " · " + tokenBreakdown(s.tokens))
-        .contextMenu {
+        .sessionActions(s)
+    }
+
+    private func tokenCell(_ count: Int, width: CGFloat) -> some View {
+        Text(Fmt.tokens(count)).lineLimit(1)
+            .frame(width: width, alignment: .trailing)
+            .help(Fmt.count(count))
+    }
+}
+
+extension View {
+    func sessionActions(_ s: SessionSummary) -> some View {
+        contextMenu {
             Button(L("复制恢复命令", "Copy resume command", ja: "再開コマンドをコピー", ko: "재개 명령 복사")) { copy(resumeCommand(s)) }
             Button(L("复制会话 ID", "Copy session ID", ja: "セッション ID をコピー", ko: "세션 ID 복사")) { copy(rawID(s)) }
             if let cwd = s.cwd {

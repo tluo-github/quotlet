@@ -1,4 +1,6 @@
 import Foundation
+import LocalAuthentication
+import Security
 
 // MARK: - 数据模型
 
@@ -6,11 +8,16 @@ struct LimitItem: Identifiable {
     let id: String
     let kind: String
     let title: String
-    let percent: Double
+    var percent: Double
     let severity: String?
     let resetsAt: Date?
     /// weekly_scoped 的范围名（Opus / Sonnet …），上报给网站自己拼标题
     var scope: String? = nil
+    var isEstimated = false
+
+    var percentText: String {
+        isEstimated ? "≈" + String(format: "%.1f%%", percent) : Fmt.percent(percent)
+    }
 }
 
 struct BreakdownRow: Identifiable {
@@ -46,6 +53,8 @@ struct UsageSnapshot {
 }
 
 enum UsageError: LocalizedError {
+    case disabled
+    case authorizationRequired
     case noCredentials
     case expired
     case forbidden
@@ -55,6 +64,10 @@ enum UsageError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .disabled:
+            return L("Claude 额度接口已关闭，本机 token 统计不受影响。", "Claude quota API is off. Local token stats still work.", ja: "Claude の使用枠 API はオフです。ローカルのトークン集計は利用できます。", ko: "Claude 한도 API가 꺼져 있습니다. 로컬 토큰 통계는 계속 작동합니다.")
+        case .authorizationRequired:
+            return L("请在设置的「额度接口」中允许访问钥匙串。", "Allow Keychain access under Quota API in Settings.", ja: "設定の「使用枠 API」でキーチェーンへのアクセスを許可してください。", ko: "설정의 ‘한도 API’에서 키체인 접근을 허용하세요.")
         case .noCredentials:
             return L("没找到 Claude Code 的登录信息。请先在终端运行 claude 并登录。", "No Claude Code login found. Run `claude` in Terminal and sign in first.", ja: "Claude Code のログイン情報が見つかりません。ターミナルで claude を実行してログインしてください。", ko: "Claude Code 로그인 정보를 찾을 수 없습니다. 터미널에서 claude를 실행해 로그인하세요.")
         case .expired:
@@ -82,27 +95,37 @@ struct Credentials {
 }
 
 enum CredentialStore {
-    /// 通过系统自带的 /usr/bin/security 读取 Claude Code 存在钥匙串里的凭证。
-    /// Claude Code 本身也是用这个命令写入的，所以一般不会弹出钥匙串授权框。
-    static func load() throws -> Credentials {
-        if let data = readKeychain(), let c = parse(data) { return c }
+    /// 只有开启额度接口后才读凭证；只有设置里的授权操作允许钥匙串交互。
+    static func load(allowInteraction: Bool = false) throws -> Credentials {
+        guard UsageAPI.isEnabled() else { throw UsageError.disabled }
+        let (data, status) = readKeychain(allowInteraction: allowInteraction)
+        if let data, let c = parse(data) { return c }
         let file = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/.credentials.json")
         if let data = try? Data(contentsOf: file), let c = parse(data) { return c }
+        if status == errSecInteractionNotAllowed || status == errSecAuthFailed || status == errSecUserCanceled {
+            throw UsageError.authorizationRequired
+        }
         throw UsageError.noCredentials
     }
 
-    private static func readKeychain() -> Data? {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        p.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = Pipe()
-        do { try p.run() } catch { return nil }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        return p.terminationStatus == 0 ? data : nil
+    private static func readKeychain(allowInteraction: Bool) -> (Data?, OSStatus) {
+        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: "Claude Code-credentials",
+                                    kSecReturnData as String: true,
+                                    kSecMatchLimit as String: kSecMatchLimitOne]
+        let context = LAContext()
+        context.interactionNotAllowed = !allowInteraction
+        context.localizedReason = L("读取 Claude Code 登录凭证以查询额度",
+                                    "Read your Claude Code login to check quota",
+                                    ja: "使用枠を確認するため Claude Code のログイン情報を読み取ります",
+                                    ko: "한도 조회를 위해 Claude Code 로그인 정보를 읽습니다")
+        query[kSecUseAuthenticationContext as String] = context
+        var result: CFTypeRef?
+        let status = KeychainAccess.perform(allowInteraction: allowInteraction) {
+            SecItemCopyMatching(query as CFDictionary, &result)
+        }
+        return (status == errSecSuccess ? result as? Data : nil, status)
     }
 
     private static func parse(_ data: Data) -> Credentials? {
@@ -118,13 +141,18 @@ enum CredentialStore {
 // MARK: - 接口
 
 enum UsageAPI {
+    static let enabledKey = "claudeUsageAPIEnabled"
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool { defaults.bool(forKey: enabledKey) }
     static let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     /// allowFallback：代理失败时是否再试直连。「测试连接」时传 false，才能真正测出代理通不通。
-    static func fetch(allowFallback: Bool = true) async throws -> UsageSnapshot {
+    static func fetch(allowFallback: Bool = true, allowInteraction: Bool = false) async throws -> UsageSnapshot {
+        guard isEnabled() else { throw UsageError.disabled }
         // 不按本地 expiresAt 提前放弃：凭证过期后 Claude Code 下次发消息时才会换新，
         // 这里照常请求，服务器拒绝（401）才算过期，Store 会每分钟重试。
-        let cred = try CredentialStore.load()
+        let cred = try await Task.detached(priority: .utility) { try CredentialStore.load(allowInteraction: allowInteraction) }.value
+        try Task.checkCancellation()
+        guard isEnabled() else { throw UsageError.disabled }
 
         var req = URLRequest(url: endpoint)
         req.setValue("Bearer \(cred.accessToken)", forHTTPHeaderField: "Authorization")
@@ -133,6 +161,8 @@ enum UsageAPI {
         req.timeoutInterval = 20
 
         let (data, resp) = try await send(req, allowFallback: allowFallback)
+        try Task.checkCancellation()
+        guard isEnabled() else { throw UsageError.disabled }
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         if code == 401 { throw UsageError.expired }
         if code == 403 { throw UsageError.forbidden }

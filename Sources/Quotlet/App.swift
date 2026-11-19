@@ -10,13 +10,9 @@ struct QuotletApp: App {
             ContentView()
                 .environmentObject(store)
         } label: {
-            if store.menuBarShowsWarning {
-                Image(systemName: "exclamationmark.triangle")
-            } else {
-                HStack(spacing: 3) {
-                    Image(systemName: store.menuBarSymbol)
-                    Text(store.menuBarText)
-                }
+            HStack(spacing: 3) {
+                Image(systemName: store.menuBarSymbol)
+                Text(store.menuBarText)
             }
         }
         .menuBarExtraStyle(.window)

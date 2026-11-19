@@ -40,7 +40,7 @@ final class CloudSync: ObservableObject {
     private var usage: (snapshot: UsageSnapshot, at: Date)?
     private var local: LocalSnapshot?
 
-    private var sentUsage: String?
+    private var sentUsage: [String: String] = [:]
     private var sentSessions: [String: String] = [:]
     /// nil = 还没做过全量同步（app 刚启动 / 刚登录）
     private var sentDaily: [String: String]?
@@ -92,7 +92,7 @@ final class CloudSync: ObservableObject {
     // MARK: 同步
 
     private func resetSent() {
-        sentUsage = nil
+        sentUsage = [:]
         sentSessions = [:]
         sentDaily = nil
         heartbeatSent = false
@@ -120,14 +120,23 @@ final class CloudSync: ObservableObject {
                 sent = true
             }
             if let (u, at) = usage {
-                let (payload, sig) = Self.usagePayload(u, at: at)
-                if sig != sentUsage {
+                let (payload, sig) = Self.usagePayload(u, at: at, provider: "claude")
+                if sig != sentUsage["claude"] {
                     try await send("PUT", "/api/ingest/usage", payload, token: token)
-                    sentUsage = sig
+                    sentUsage["claude"] = sig
                     sent = true
                 }
             }
             if let l = local {
+                if let c = l.codexLimits {
+                    let snapshot = UsageSnapshot(limits: c.limitItems(now: Date()), breakdown: [], breakdownStart: nil, extra: nil, plan: c.planTitle)
+                    let (payload, sig) = Self.usagePayload(snapshot, at: c.observedAt, provider: "codex")
+                    if sentUsage["codex"] != sig {
+                        try await send("PUT", "/api/ingest/usage", payload, token: token)
+                        sentUsage["codex"] = sig
+                        sent = true
+                    }
+                }
                 if try await syncSessions(l, token: token) { sent = true }
                 if try await syncDaily(l, token: token) { sent = true }
             }
@@ -202,7 +211,7 @@ final class CloudSync: ObservableObject {
         return String(decoding: d, as: UTF8.self)
     }
 
-    private static func usagePayload(_ u: UsageSnapshot, at: Date) -> ([String: Any], String) {
+    private static func usagePayload(_ u: UsageSnapshot, at: Date, provider: String) -> ([String: Any], String) {
         let limits: [[String: Any]] = u.limits.map { l in
             var d: [String: Any] = ["kind": l.kind, "title": l.title, "percent": l.percent]
             if let s = l.scope { d["scope"] = s }
@@ -210,11 +219,11 @@ final class CloudSync: ObservableObject {
             if let r = l.resetsAt { d["resets_at"] = ms(r) }
             return d
         }
-        var payload: [String: Any] = ["limits": limits, "fetched_at": ms(at)]
+        var payload: [String: Any] = ["provider": provider, "limits": limits, "fetched_at": ms(at)]
         if let plan = u.plan { payload["plan"] = plan }
-        // 签名不含 fetched_at 和标题（标题跟着界面语言变）：只有额度本身变了才发
+        // 额度变更立即上传；数值不变时每 15 分钟补一条采样，保留可读的历史趋势。
         let sigLimits = limits.map { $0.filter { $0.key != "title" } }
-        let sig = signature(["plan": u.plan ?? "", "limits": sigLimits])
+        let sig = signature(["plan": u.plan ?? "", "limits": sigLimits, "sample": Int(at.timeIntervalSince1970 / 900)])
         return (payload, sig)
     }
 
@@ -225,6 +234,7 @@ final class CloudSync: ObservableObject {
         let active = s.isActive(now: now)
         var p: [String: Any] = [
             "id": s.id,
+            "source": s.source.rawValue,
             "project": s.project,
             "model": s.mainModel,
             "status": active ? "running" : "done",
@@ -243,13 +253,13 @@ final class CloudSync: ObservableObject {
 
     private static func dailyRows(_ l: LocalSnapshot) -> [(key: String, sig: String, payload: [String: Any])] {
         struct Agg { var t = TokenCount(); var n = 0 }
-        var by: [String: (day: String, project: String, model: String, agg: Agg)] = [:]
+        var by: [String: (day: String, project: String, model: String, source: String, agg: Agg)] = [:]
         let cal = Fmt.calendar
         for m in l.messages {
             let c = cal.dateComponents([.year, .month, .day], from: m.ts)
             let day = String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
             let key = "\(day)|\(m.project)|\(m.model)"
-            var e = by[key] ?? (day, m.project, m.model, Agg())
+            var e = by[key] ?? (day, m.project, m.model, m.source.rawValue, Agg())
             e.agg.t += m.tokens
             e.agg.n += 1
             by[key] = e
@@ -258,6 +268,7 @@ final class CloudSync: ObservableObject {
             let t = e.agg.t
             return (key, "\(t.input)|\(t.output)|\(t.cacheRead)|\(t.cacheWrite)|\(e.agg.n)", [
                 "day": e.day, "project": e.project, "model": e.model,
+                "source": e.source,
                 "tokens_in": t.input, "tokens_out": t.output,
                 "tokens_cache_read": t.cacheRead, "tokens_cache_write": t.cacheWrite,
                 "requests": e.agg.n,

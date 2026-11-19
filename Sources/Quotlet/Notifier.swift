@@ -23,9 +23,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         return Double(thresholdChoices.contains(v) ? v : 90)
     }
     private static let resetPrefix = "reset|"
+    private var evaluationSignatures: [String: String] = [:]
+    private var resetGenerations: [String: Int] = [:]
 
-    static func registerDefaults() {
-        UserDefaults.standard.register(defaults: [Key.low: true, Key.full: true, Key.reset: true, Key.threshold: 90])
+    static func registerDefaults(_ defaults: UserDefaults = .standard) {
+        defaults.register(defaults: [Key.low: true, Key.full: true, Key.reset: true, Key.threshold: 90])
     }
 
     /// 没有 bundle id 的开发版二进制不能用通知中心（会崩溃），直接跳过。
@@ -33,11 +35,31 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         Bundle.main.bundleIdentifier == nil ? nil : .current()
     }
 
-    func setup() {
-        guard let center else { return }
+    func setup(onAuthorized: @escaping () -> Void) {
+        guard let center, !Cloud.isPreview else { return }
         center.delegate = self
+        if !UserDefaults.standard.bool(forKey: Key.reset) { cancelResetReminders() }
+        else if !UsageAPI.isEnabled() { cancelResetReminders(provider: "Claude") }
         let d = UserDefaults.standard
-        if d.bool(forKey: Key.low) || d.bool(forKey: Key.full) || d.bool(forKey: Key.reset) { requestAuthorization() }
+        guard d.bool(forKey: Key.low) || d.bool(forKey: Key.full) || d.bool(forKey: Key.reset) else { return }
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else { return }
+            self.requestAuthorization { granted in if granted { onAuthorized() } }
+        }
+    }
+
+    func cancelResetReminders(provider: String? = nil) {
+        if let provider {
+            evaluationSignatures.removeValue(forKey: provider)
+            resetGenerations[provider, default: 0] += 1
+        } else {
+            evaluationSignatures.removeAll()
+            for key in Array(resetGenerations.keys) { resetGenerations[key, default: 0] += 1 }
+        }
+        let prefix = Self.resetPrefix + (provider.map { $0.lowercased() + "|" } ?? "")
+        center?.getPendingNotificationRequests { requests in
+            self.center?.removePendingNotificationRequests(withIdentifiers: requests.map(\.identifier).filter { $0.hasPrefix(prefix) })
+        }
     }
 
     func requestAuthorization(_ done: ((Bool) -> Void)? = nil) {
@@ -55,63 +77,107 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     /// 每次成功取到额度后调用。
     func evaluate(_ usage: UsageSnapshot, now: Date = Date()) {
+        evaluate(provider: "Claude", limits: usage.limits, now: now)
+    }
+
+    func evaluate(provider: String, limits items: [LimitItem], now: Date = Date()) {
+        guard !Cloud.isPreview else { return }
+        guard let center else { return }
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+            DispatchQueue.main.async { self.evaluateAuthorized(provider: provider, limits: items, now: now) }
+        }
+    }
+
+    private func evaluateAuthorized(provider: String, limits items: [LimitItem], now: Date) {
         guard let center else { return }
         let d = UserDefaults.standard
-        let limits = usage.limits.filter { $0.kind == "session" || $0.kind.hasPrefix("weekly") }
+        let resetPrefix = Self.resetPrefix + provider.lowercased() + "|"
+        let limits = items.filter {
+            ($0.kind == "session" || $0.kind.hasPrefix("weekly")) && ($0.resetsAt.map { $0 > now } ?? true)
+        }
+        let signature = "\(d.bool(forKey: Key.low))|\(d.bool(forKey: Key.full))|\(d.bool(forKey: Key.reset))|\(Self.lowThreshold)|"
+            + limits.map { "\(Self.windowKey(provider: provider, item: $0))|\($0.percent >= Self.lowThreshold)|\($0.percent >= 100)|\($0.isEstimated)" }.sorted().joined(separator: ";")
+        guard evaluationSignatures[provider] != signature else { return }
+        evaluationSignatures[provider] = signature
         var sent = d.stringArray(forKey: Key.sent) ?? []
 
         for item in limits {
-            let window = Int(item.resetsAt?.timeIntervalSince1970 ?? 0)
-            let base = "\(item.kind)|\(item.title)|\(window)"
+            let base = Self.windowKey(provider: provider, item: item)
+            let title = item.title.hasPrefix(provider) ? item.title : "\(provider) · \(item.title)"
             let when = item.resetsAt.map { r in
                 L("\(Fmt.resetMoment(r, now: now)) 重置 · \(Fmt.countdown(to: r, now: now))",
                   "Resets \(Fmt.resetMoment(r, now: now)) · \(Fmt.countdown(to: r, now: now))",
                   ja: "\(Fmt.resetMoment(r, now: now)) にリセット · \(Fmt.countdown(to: r, now: now))",
                   ko: "\(Fmt.resetMoment(r, now: now)) 재설정 · \(Fmt.countdown(to: r, now: now))")
             } ?? ""
+            let body = item.isEstimated
+                ? L("根据本机新增 token 估算，下次接口刷新时校正。", "Estimated from new local tokens. Corrected at the next quota refresh.",
+                    ja: "ローカルの新規トークンから推定。次の API 更新時に補正します。", ko: "새 로컬 토큰으로 추정하며 다음 한도 새로 고침 시 보정됩니다.") + " " + when
+                : when
 
             if item.percent >= 100 {
                 let key = base + "|full"
                 if d.bool(forKey: Key.full), !sent.contains(key) {
                     post(id: key,
-                         title: L("\(item.title)：已用完", "\(item.title): limit reached",
-                                  ja: "\(item.title)：上限に達しました", ko: "\(item.title): 한도 도달"),
-                         body: when)
+                         title: item.isEstimated
+                            ? L("\(title)：预计已用完", "\(title): estimated limit reached", ja: "\(title)：上限到達の推定", ko: "\(title): 예상 한도 도달")
+                            : L("\(title)：已用完", "\(title): limit reached", ja: "\(title)：上限に達しました", ko: "\(title): 한도 도달"),
+                         body: body)
                 }
-                sent.append(contentsOf: [key, base + "|low"])   // 用完时不再补发「快到上限」
-            } else if item.percent >= Self.lowThreshold {
+                if d.bool(forKey: Key.full) {
+                    sent.append(contentsOf: [key, base + "|low"])   // 用完时不再补发「快到上限」
+                }
+            }
+            if Self.shouldWarn(item: item, threshold: Self.lowThreshold, lowEnabled: d.bool(forKey: Key.low),
+                               fullEnabled: d.bool(forKey: Key.full), now: now) {
                 let key = base + "|low"
                 if d.bool(forKey: Key.low), !sent.contains(key) {
                     post(id: key,
-                         title: L("\(item.title)：已用 \(Fmt.percent(item.percent))，快到上限",
-                                  "\(item.title): \(Fmt.percent(item.percent)) used, nearing the limit",
-                                  ja: "\(item.title)：\(Fmt.percent(item.percent)) 使用、上限が近づいています",
-                                  ko: "\(item.title): \(Fmt.percent(item.percent)) 사용, 한도에 가까워짐"),
-                         body: when)
+                         title: L("\(title)：已用 \(item.percentText)，快到上限",
+                                  "\(title): \(item.percentText) used, nearing the limit",
+                                  ja: "\(title)：\(item.percentText) 使用、上限が近づいています",
+                                  ko: "\(title): \(item.percentText) 사용, 한도에 가까워짐"),
+                         body: body)
                 }
-                sent.append(key)
+                if d.bool(forKey: Key.low) { sent.append(key) }
             }
         }
         d.set(Array(Set(sent)).suffix(300).map { $0 }, forKey: Key.sent)
 
-        // 「已恢复」：给用到 80% 以上的额度在重置时间排一条通知（每次刷新重排）
+        // 「已恢复」：达到用户设置的阈值后，在重置时间安排通知。
+        resetGenerations[provider, default: 0] += 1
+        let generation = resetGenerations[provider]
         center.getPendingNotificationRequests { pending in
-            let old = pending.map(\.identifier).filter { $0.hasPrefix(Self.resetPrefix) }
-            center.removePendingNotificationRequests(withIdentifiers: old)
-            guard d.bool(forKey: Key.reset) else { return }
-            for item in limits where item.percent >= Self.lowThreshold {
-                guard let r = item.resetsAt, r.timeIntervalSince(now) > 0 else { continue }
-                let content = UNMutableNotificationContent()
-                content.title = L("\(item.title)：已恢复", "\(item.title): available again",
-                                  ja: "\(item.title)：リセットされました", ko: "\(item.title): 다시 사용 가능")
-                content.body = L("额度已重置，可以继续使用 Claude 了。", "Your limit has reset. You can use Claude again.",
-                                 ja: "上限がリセットされました。Claude を再び使えます。", ko: "한도가 재설정되었습니다. Claude를 다시 사용할 수 있습니다.")
-                content.sound = .default
-                let trigger = UNTimeIntervalNotificationTrigger(timeInterval: r.timeIntervalSince(now) + 5, repeats: false)
-                center.add(UNNotificationRequest(identifier: Self.resetPrefix + item.kind + "|" + item.title,
-                                                 content: content, trigger: trigger))
+            DispatchQueue.main.async {
+                guard self.resetGenerations[provider] == generation else { return }
+                let old = pending.map(\.identifier).filter { $0.hasPrefix(resetPrefix) || ($0.hasPrefix(Self.resetPrefix) && !$0.hasPrefix("reset|claude|") && !$0.hasPrefix("reset|codex|")) }
+                center.removePendingNotificationRequests(withIdentifiers: old)
+                guard d.bool(forKey: Key.reset) else { return }
+                for item in limits where item.percent >= Self.lowThreshold {
+                    guard let r = item.resetsAt, r.timeIntervalSince(now) > 0 else { continue }
+                    let title = item.title.hasPrefix(provider) ? item.title : "\(provider) · \(item.title)"
+                    let content = UNMutableNotificationContent()
+                    content.title = L("\(title)：已恢复", "\(title): available again",
+                                      ja: "\(title)：リセットされました", ko: "\(title): 다시 사용 가능")
+                    content.body = L("额度已重置，可以继续使用 \(provider) 了。", "Your limit has reset. You can use \(provider) again.",
+                                     ja: "上限がリセットされました。\(provider) を再び使えます。", ko: "한도가 재설정되었습니다. \(provider)를 다시 사용할 수 있습니다.")
+                    content.sound = .default
+                    let trigger = UNTimeIntervalNotificationTrigger(timeInterval: r.timeIntervalSince(now) + 5, repeats: false)
+                    center.add(UNNotificationRequest(identifier: resetPrefix + item.kind + "|" + (item.scope ?? ""),
+                                                     content: content, trigger: trigger))
+                }
             }
         }
+    }
+
+    static func windowKey(provider: String, item: LimitItem) -> String {
+        "\(provider)|\(item.kind)|\(item.scope ?? "")|\(Int(item.resetsAt?.timeIntervalSince1970 ?? 0))"
+    }
+
+    static func shouldWarn(item: LimitItem, threshold: Double, lowEnabled: Bool, fullEnabled: Bool, now: Date) -> Bool {
+        lowEnabled && item.percent >= threshold && (item.percent < 100 || !fullEnabled)
+            && (item.resetsAt.map { $0 > now } ?? true)
     }
 
     /// 设置页的「发送测试通知」。返回是否有通知权限。
@@ -130,10 +196,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    /// 一次性提醒（比如登录结果）：没授权过会先请求通知权限
+    /// 登录结果只使用已有通知权限，不因登录额外申请权限。
     func notify(title: String, body: String) {
-        requestAuthorization { ok in
-            if ok { self.post(id: "msg-\(Date().timeIntervalSince1970)", title: title, body: body) }
+        center?.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else { return }
+            self.post(id: "msg-\(Date().timeIntervalSince1970)", title: title, body: body)
         }
     }
 

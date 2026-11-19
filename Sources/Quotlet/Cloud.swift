@@ -2,6 +2,7 @@ import AppKit
 import CryptoKit
 import Foundation
 import Security
+import LocalAuthentication
 
 // Quotlet Cloud：登录 app.quotlet.com，以后用来上报额度和会话。
 // 默认关闭；没登录时不发任何请求。
@@ -51,7 +52,7 @@ final class Cloud: ObservableObject {
     var isSignedIn: Bool { user != nil }
 
     /// 截图 / 录屏模式：不读钥匙串、不联网
-    static let isPreview = CommandLine.arguments.contains("--snapshot") || CommandLine.arguments.contains("--showcase")
+    nonisolated static let isPreview = CommandLine.arguments.contains("--snapshot") || CommandLine.arguments.contains("--showcase")
 
     /// 设备 token 缓存在内存里：上报每分钟都要用，不能每次都读钥匙串
     private(set) var token: String?
@@ -78,12 +79,13 @@ final class Cloud: ObservableObject {
             return
         }
         // 先用上次保存的账号信息显示，再去服务器确认 token 还有效（可能在网页上被移除了）
-        token = CloudToken.load()
-        if token != nil,
-           let data = UserDefaults.standard.data(forKey: Self.userKey),
+        if let data = UserDefaults.standard.data(forKey: Self.userKey),
            let u = try? JSONDecoder().decode(CloudUser.self, from: data) {
-            user = u
-            Task { await refreshMe() }
+            token = CloudToken.load()
+            if token != nil {
+                user = u
+                Task { await refreshMe() }
+            }
         }
     }
 
@@ -211,7 +213,7 @@ final class Cloud: ObservableObject {
 
     // MARK: 网络
 
-    /// 和额度请求一样：开了代理先走代理，失败再直连（国内访问 workers.dev 需要代理）。
+    /// 和额度请求一样：开了代理先走代理，失败再直连。
     /// 整轮都失败时再重试一次。每次失败都写进系统日志：
     /// `log show --last 10m --predicate 'process == "Quotlet" AND eventMessage CONTAINS "[cloud]"'`
     nonisolated static func request(_ method: String, _ path: String, json: [String: Any]? = nil, token: String?) async throws -> (Data, Int) {
@@ -268,10 +270,19 @@ final class Cloud: ObservableObject {
 
 /// Quotlet 自己的钥匙串条目（和 Claude Code 的凭证无关）
 enum CloudToken {
-    private static let service = "Quotabar Cloud"   // 改名前的名字，保留不改：改了已登录的用户要重新登录
-    private static let account = "device-token"
+    private static let service = "Quotabar Cloud"
+    private static let accountKey = "cloudTokenAccount"
+
+    // 旧版本使用固定账号；新登录使用独立条目，兼容临时签名变化后无法访问的旧条目。
+    private static var account: String {
+        UserDefaults.standard.string(forKey: accountKey) ?? "device-token"
+    }
 
     private static var query: [String: Any] {
+        query(account: account)
+    }
+
+    private static func query(account: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: account]
@@ -281,21 +292,35 @@ enum CloudToken {
         var q = query
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
+        let context = LAContext()
+        context.interactionNotAllowed = true
+        q[kSecUseAuthenticationContext as String] = context
         var out: CFTypeRef?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let data = out as? Data else { return nil }
+        let status = KeychainAccess.perform(allowInteraction: false) {
+            SecItemCopyMatching(q as CFDictionary, &out)
+        }
+        guard status == errSecSuccess, let data = out as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
     @discardableResult
     static func save(_ token: String) -> Bool {
-        delete()
-        var q = query
+        let previous = query
+        let newAccount = "device-token-\(UUID().uuidString)"
+        var q = query(account: newAccount)
         q[kSecValueData as String] = Data(token.utf8)
         q[kSecAttrLabel as String] = service
-        return SecItemAdd(q as CFDictionary, nil) == errSecSuccess
+        let status = KeychainAccess.perform(allowInteraction: false) {
+            SecItemAdd(q as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else { return false }
+        UserDefaults.standard.set(newAccount, forKey: accountKey)
+        // 新 token 已持久化后再清理旧条目。旧签名的 ACL 可能禁止删除，清理失败也可继续登录。
+        _ = KeychainAccess.perform(allowInteraction: false) { SecItemDelete(previous as CFDictionary) }
+        return true
     }
 
     static func delete() {
-        SecItemDelete(query as CFDictionary)
+        _ = KeychainAccess.perform(allowInteraction: false) { SecItemDelete(query as CFDictionary) }
     }
 }

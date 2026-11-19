@@ -10,6 +10,18 @@ enum Snapshot {
         return args[i + 1]
     }
 
+    /// 仅供开发截图复现折线图选中时刻，不移动用户的鼠标。
+    static var projectCursor: Date? {
+        #if DEBUG
+        guard directory != nil,
+              let value = ProcessInfo.processInfo.environment["QUOTLET_SNAPSHOT_PROJECT_CURSOR"],
+              let timestamp = Double(value) else { return nil }
+        return Date(timeIntervalSince1970: timestamp)
+        #else
+        return nil
+        #endif
+    }
+
     @MainActor
     static func run(store: Store, dir: String) async {
         try? await Task.sleep(for: .seconds(2))
@@ -17,16 +29,21 @@ enum Snapshot {
         for _ in 0..<60 where store.local == nil || store.isScanning { try? await Task.sleep(for: .milliseconds(500)) }
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
 
+        let snapshotWidth = UserDefaults.standard.double(forKey: "snapshotHistoryWidth")
+        let snapshotHeight = UserDefaults.standard.double(forKey: "snapshotHistoryHeight")
         let stage = UserDefaults.standard.bool(forKey: "stage")
+        let tab = UserDefaults.standard.string(forKey: "snapshotPanelTab").flatMap(ContentView.Tab.init(rawValue:))
         // -stage YES 时多出一张 "closed"：只有仿状态栏、面板收起（演示视频的开头）
         // 页面名 + 是否打开设置；history 是用量历史窗口
         var pages: [(String, Bool)] = [("usage", false), ("settings", true), ("history", false)]
-        if stage { pages.insert(("closed", false), at: 0) }
+        if let tab { pages = [(tab.rawValue, false)] }
+        else if stage { pages.insert(("closed", false), at: 0) }
         for (mode, name) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
             for (page, settings) in pages {
                 // -stage YES：带展示背景和仿状态栏（README 截图用）
                 let view = Group {
-                    if page == "history" { HistoryView().frame(width: 1120, height: 900) }
+                    if let tab { ContentView(initialTab: tab) }
+                    else if page == "history" { HistoryView().frame(width: snapshotWidth > 0 ? snapshotWidth : 1120, height: snapshotHeight > 0 ? snapshotHeight : 900) }
                     else if stage { Stage(open: page != "closed", startInSettings: settings) }
                     else { ContentView(startInSettings: settings) }
                 }
