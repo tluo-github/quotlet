@@ -46,6 +46,7 @@ final class Cloud: ObservableObject {
     static let shared = Cloud()
 
     @Published private(set) var user: CloudUser?
+    @Published private(set) var deviceId: String?
     @Published private(set) var isBusy = false
     @Published private(set) var errorMessage: String?
 
@@ -76,6 +77,7 @@ final class Cloud: ObservableObject {
            UserDefaults.standard.string(forKey: "cloudBaseURL") != nil {
             token = dev
             user = CloudUser(id: "dev", email: nil, name: "Dev")
+            Task { await refreshMe() }
             return
         }
         // 先用上次保存的账号信息显示，再去服务器确认 token 还有效（可能在网页上被移除了）
@@ -148,6 +150,7 @@ final class Cloud: ObservableObject {
             }
             self.token = token
             setUser(u)
+            Task { await refreshMe() }
             Notifier.shared.notify(title: L("已登录 Quotlet Cloud", "Signed in to Quotlet Cloud", ja: "Quotlet Cloud にログインしました", ko: "Quotlet Cloud에 로그인했습니다"),
                                    body: [u.name, u.email].compactMap { $0 }.joined(separator: " · "))
         } catch {
@@ -186,6 +189,9 @@ final class Cloud: ObservableObject {
            let userObj = root["user"],
            let userData = try? JSONSerialization.data(withJSONObject: userObj),
            let u = try? JSONDecoder().decode(CloudUser.self, from: userData) {
+            if let dev = root["device"] as? [String: Any], let id = dev["id"] as? String {
+                deviceId = id
+            }
             setUser(u)
         }
     }
@@ -199,7 +205,10 @@ final class Cloud: ObservableObject {
     private func clearToken() {
         CloudToken.delete()
         token = nil
+        deviceId = nil
         setUser(nil)
+        HookManager.shared.handleSignedOut()
+        RemoteCommandManager.shared.handleSignedOut()
     }
 
     private func setUser(_ u: CloudUser?) {
@@ -217,7 +226,8 @@ final class Cloud: ObservableObject {
     /// 整轮都失败时再重试一次。每次失败都写进系统日志：
     /// `log show --last 10m --predicate 'process == "Quotlet" AND eventMessage CONTAINS "[cloud]"'`
     nonisolated static func request(_ method: String, _ path: String, json: [String: Any]? = nil, token: String?) async throws -> (Data, Int) {
-        var req = URLRequest(url: CloudConfig.base.appendingPathComponent(path))
+        let url = URL(string: path, relativeTo: CloudConfig.base)?.absoluteURL ?? CloudConfig.base.appendingPathComponent(path)
+        var req = URLRequest(url: url)
         req.httpMethod = method
         req.timeoutInterval = 20
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -228,7 +238,7 @@ final class Cloud: ObservableObject {
         }
         var firstError: Error?
         for round in 1...2 {
-            let sessions = Network.sessions(allowFallback: true)
+            let sessions = Network.sessions(for: url, allowFallback: true)
             for (i, session) in sessions.enumerated() {
                 let route = (i == 0 && sessions.count > 1) ? "proxy" : "direct"
                 let started = Date()
