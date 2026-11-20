@@ -7,6 +7,17 @@ import Foundation
 // - 串行执行指令并实时回报进度与摘要（POST /api/commands/:id/status）
 // - 退出登录时自动关闭远程指令并断开 WebSocket
 
+struct RemoteLogEntry: Identifiable, Equatable {
+    enum Level: String {
+        case info, ok, warn, error
+    }
+    let id = UUID()
+    let ts: Date
+    let level: Level
+    let category: String   // WS | CMD | CAP | API
+    let message: String
+}
+
 @MainActor
 final class RemoteCommandManager: ObservableObject {
     static let shared = RemoteCommandManager()
@@ -16,6 +27,12 @@ final class RemoteCommandManager: ObservableObject {
         static let confirm = "cloudRemoteConfirmRequired"
     }
 
+    static var debugLogURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Quotlet", isDirectory: true)
+            .appendingPathComponent("remote-debug.log")
+    }
+
     /// 远程指令开关：默认关闭，仅能在本台 Mac 上登录后手动开启
     @Published private(set) var enabled: Bool = false
     /// 可选：每条指令执行前在 Mac 上弹窗确认
@@ -23,10 +40,13 @@ final class RemoteCommandManager: ObservableObject {
         didSet { UserDefaults.standard.set(requireConfirmation, forKey: Key.confirm) }
     }
     @Published private(set) var wsConnected: Bool = false
+    @Published private(set) var lastWSConnectedAt: Date?
+    @Published private(set) var wsRouteLabel: String = ""
     @Published private(set) var capabilities: DeviceCapabilities?
     @Published private(set) var activeCommandId: String?
     @Published private(set) var lastError: String?
     @Published private(set) var recentHistory: [CommandHistoryEntry] = []
+    @Published private(set) var logs: [RemoteLogEntry] = []
 
     private var localSnapshot: LocalSnapshot?
     private var userWatch: AnyCancellable?
@@ -94,14 +114,70 @@ final class RemoteCommandManager: ObservableObject {
     }
 
     func probeCapabilities() {
+        log(.info, "CAP", "正在探测本机 Claude / Codex / Antigravity CLI…")
         Task.detached(priority: .utility) {
             let caps = CLICapabilityProber.probeAll()
             await MainActor.run {
                 self.capabilities = caps
+                self.log(.ok, "CAP", "探测完成：Claude=\(caps.claude.available ? (caps.claude.version ?? "✓") : "未安装") · Codex=\(caps.codex.available ? (caps.codex.version ?? "✓") : "未安装") · Antigravity=\(caps.gemini.available ? (caps.gemini.version ?? "✓") : "未安装")")
                 CloudSync.shared.capabilitiesUpdated(caps)
                 self.syncDeviceStateToServer()
             }
         }
+    }
+
+    func reconnectAndSync() {
+        log(.info, "WS", "手动触发重连并拉取排队指令")
+        reconnectDelay = 2
+        disconnectWebSocket()
+        syncDeviceStateToServer()
+        ensureConnectionState()
+        if enabled {
+            Task { await reconcileQueuedCommands() }
+        }
+    }
+
+    func clearLogs() {
+        logs.removeAll()
+        try? FileManager.default.removeItem(at: Self.debugLogURL)
+    }
+
+    private func log(_ level: RemoteLogEntry.Level, _ category: String, _ message: String) {
+        let entry = RemoteLogEntry(ts: Date(), level: level, category: category, message: message)
+        logs.insert(entry, at: 0)
+        if logs.count > 250 {
+            logs.removeLast(logs.count - 250)
+        }
+        NSLog("[cloud-%@] %@", category.lowercased(), message)
+        Self.appendDebugLogLine(entry)
+    }
+
+    private static let logDateFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
+    private static func appendDebugLogLine(_ entry: RemoteLogEntry) {
+        let url = debugLogURL
+        let fm = FileManager.default
+        let dir = url.deletingLastPathComponent()
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let attrs = try? fm.attributesOfItem(atPath: url.path),
+           let size = attrs[.size] as? UInt64, size > 512_000 {
+            let rotated = dir.appendingPathComponent("remote-debug.log.1")
+            try? fm.removeItem(at: rotated)
+            try? fm.moveItem(at: url, to: rotated)
+        }
+        let line = "[\(logDateFmt.string(from: entry.ts))] [\(entry.level.rawValue.uppercased())] [\(entry.category)] \(entry.message)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        if !fm.fileExists(atPath: url.path) {
+            fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
+        }
+        guard let fh = try? FileHandle(forWritingTo: url) else { return }
+        defer { try? fh.close() }
+        _ = try? fh.seekToEnd()
+        try? fh.write(contentsOf: data)
     }
 
     func setEnabled(_ on: Bool) {
@@ -157,16 +233,20 @@ final class RemoteCommandManager: ObservableObject {
             body["projects"] = projects
         }
         let remoteFlag = enabled
+        let projCount = (body["projects"] as? [String])?.count ?? 0
         Task {
             do {
                 let (_, status) = try await Cloud.request("PATCH", "/api/devices/self", json: body, token: token)
                 if status == 401 {
+                    self.log(.error, "API", "PATCH /api/devices/self 返回 401，已退出登录")
                     Cloud.shared.handleUnauthorized()
                 } else if !(200..<300).contains(status) {
-                    NSLog("[cloud-remote] PATCH /api/devices/self -> %d (remote=%@)", status, String(remoteFlag))
+                    self.log(.warn, "API", "PATCH /api/devices/self -> HTTP \(status) (remote=\(remoteFlag))")
+                } else {
+                    self.log(.ok, "API", "已同步设备状态：remote=\(remoteFlag ? "开" : "关")，近 30 天项目 \(projCount) 个")
                 }
             } catch {
-                NSLog("[cloud-remote] PATCH /api/devices/self failed: %@", error.localizedDescription)
+                self.log(.error, "API", "同步设备状态失败：\(error.localizedDescription)")
             }
         }
     }
@@ -200,13 +280,15 @@ final class RemoteCommandManager: ObservableObject {
         req.timeoutInterval = 20
 
         let sessions = Network.sessions(for: url, allowFallback: true)
-        let session = sessions.isEmpty ? URLSession(configuration: .ephemeral) : sessions[wsRouteIndex % sessions.count]
+        let idx = sessions.isEmpty ? 0 : (wsRouteIndex % sessions.count)
+        let session = sessions.isEmpty ? URLSession(configuration: .ephemeral) : sessions[idx]
+        wsRouteLabel = (idx == 0 && sessions.count > 1) ? "代理" : "直连"
         let task = session.webSocketTask(with: req)
         wsSession = session
         wsTask = task
         task.resume()
         isConnecting = false
-        NSLog("[cloud-ws] connecting to %@ (route %d/%d)", url.absoluteString, (wsRouteIndex % max(sessions.count, 1)) + 1, max(sessions.count, 1))
+        log(.info, "WS", "正在连接 \(url.absoluteString)（\(wsRouteLabel)）")
 
         receiveLoop(for: task)
         startPingLoop(for: task)
@@ -269,7 +351,7 @@ final class RemoteCommandManager: ObservableObject {
         wsRouteIndex += 1
         pingTask?.cancel()
         pingTask = nil
-        NSLog("[cloud-ws] disconnected: %@", error.localizedDescription)
+        log(.warn, "WS", "实时通道断开：\(error.localizedDescription)，\(Int(reconnectDelay))s 后重连")
         guard shouldMaintainWebSocket else { return }
         let delay = reconnectDelay
         reconnectDelay = min(reconnectDelay * 2, 30)
@@ -288,8 +370,10 @@ final class RemoteCommandManager: ObservableObject {
         switch type {
         case "hello":
             wsConnected = true
+            lastWSConnectedAt = Date()
             reconnectDelay = 2
-            NSLog("[cloud-ws] connected")
+            let helloDevId = ((root["data"] as? [String: Any])?["device_id"] as? String) ?? Cloud.shared.deviceId ?? "unknown"
+            log(.ok, "WS", "实时通道已连接（\(wsRouteLabel)，device_id=\(helloDevId.suffix(8))）")
             if enabled {
                 syncDeviceStateToServer()
                 Task { await reconcileQueuedCommands() }
@@ -300,6 +384,7 @@ final class RemoteCommandManager: ObservableObject {
             guard let cmdObj = root["data"],
                   let cmdData = try? JSONSerialization.data(withJSONObject: cmdObj),
                   let cmd = try? JSONDecoder().decode(RemoteCommand.self, from: cmdData) else { return }
+            log(.info, "CMD", "通过 WS 收到指令 \(cmd.id.prefix(8)) [\(cmd.provider)/\(cmd.mode)] 项目=\(cmd.project ?? "-")")
             sendAck(commandId: cmd.id)
             enqueue(cmd)
         default:
@@ -329,12 +414,19 @@ final class RemoteCommandManager: ObservableObject {
 
     private func fetchQueued(deviceId: String, token: String) async {
         let path = "/api/commands?device=\(deviceId)&status=queued,delivered&limit=20"
-        guard let (data, status) = try? await Cloud.request("GET", path, token: token),
-              status == 200,
+        guard let (data, status) = try? await Cloud.request("GET", path, token: token) else {
+            log(.warn, "API", "拉取排队指令失败（网络错误）")
+            return
+        }
+        guard status == 200,
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let arr = root["commands"],
               let arrData = try? JSONSerialization.data(withJSONObject: arr),
-              let cmds = try? JSONDecoder().decode([RemoteCommand].self, from: arrData) else { return }
+              let cmds = try? JSONDecoder().decode([RemoteCommand].self, from: arrData) else {
+            log(.warn, "API", "拉取排队指令返回 HTTP \(status)")
+            return
+        }
+        log(.info, "API", "对账排队指令（device=\(deviceId.suffix(8))）：找到 \(cmds.count) 条")
         for cmd in cmds.reversed() {
             enqueue(cmd)
         }
@@ -408,6 +500,7 @@ final class RemoteCommandManager: ObservableObject {
             entry.error = reason
             entry.finishedAt = Date()
             recordHistory(entry)
+            log(.warn, "CMD", "指令 \(cmd.id.prefix(8)) 被安全策略拒绝：\(reason)")
             await reportStatus(cmd.id, status: "rejected", error: reason)
             return
 
@@ -424,6 +517,7 @@ final class RemoteCommandManager: ObservableObject {
                     entry.error = reason
                     entry.finishedAt = Date()
                     recordHistory(entry)
+                    log(.warn, "CMD", "指令 \(cmd.id.prefix(8)) 在本机弹窗被用户拒绝")
                     await reportStatus(cmd.id, status: "rejected", error: reason)
                     return
                 }
@@ -431,6 +525,7 @@ final class RemoteCommandManager: ObservableObject {
 
             entry.status = "running"
             recordHistory(entry)
+            log(.info, "CMD", "开始执行 \(cmd.id.prefix(8))：\(cliPath) [\(mode.rawValue)] cwd=\(cwd)")
             await reportStatus(cmd.id, status: "running", progress: "正在启动 \(source.title)…")
 
             if let sid = cmd.sessionId { ownRunningSessionIds.insert(sid) }
@@ -457,6 +552,12 @@ final class RemoteCommandManager: ObservableObject {
             entry.resultSessionId = result.resultSessionId
             entry.finishedAt = Date()
             recordHistory(entry)
+
+            if result.succeeded {
+                log(.ok, "CMD", "指令 \(cmd.id.prefix(8)) 执行完成（session=\(result.resultSessionId ?? "-")）")
+            } else {
+                log(.error, "CMD", "指令 \(cmd.id.prefix(8)) 执行失败：\(result.error ?? "未知错误")")
+            }
 
             await reportStatus(
                 cmd.id,

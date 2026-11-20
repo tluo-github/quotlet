@@ -799,6 +799,10 @@ struct SettingsView: View {
                                   detail: remoteDetailText,
                                   status: remoteStatus)
                     Spacer()
+                    ChipButton(title: L("日志", "Logs", ja: "ログ", ko: "로그")) {
+                        RemoteCommandLogWindowController.shared.show()
+                    }
+                    .fixedSize()
                     SwitchToggle(isOn: Binding(get: { remote.enabled }, set: { remote.setEnabled($0) }))
                 }
                 if remote.enabled {
