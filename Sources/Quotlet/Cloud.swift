@@ -46,6 +46,7 @@ final class Cloud: ObservableObject {
     static let shared = Cloud()
 
     @Published private(set) var user: CloudUser?
+    @Published private(set) var deviceId: String?
     @Published private(set) var isBusy = false
     @Published private(set) var errorMessage: String?
 
@@ -76,6 +77,7 @@ final class Cloud: ObservableObject {
            UserDefaults.standard.string(forKey: "cloudBaseURL") != nil {
             token = dev
             user = CloudUser(id: "dev", email: nil, name: "Dev")
+            Task { await refreshMe() }
             return
         }
         // 先用上次保存的账号信息显示，再去服务器确认 token 还有效（可能在网页上被移除了）
@@ -148,6 +150,7 @@ final class Cloud: ObservableObject {
             }
             self.token = token
             setUser(u)
+            Task { await refreshMe() }
             Notifier.shared.notify(title: L("已登录 Quotlet Cloud", "Signed in to Quotlet Cloud", ja: "Quotlet Cloud にログインしました", ko: "Quotlet Cloud에 로그인했습니다"),
                                    body: [u.name, u.email].compactMap { $0 }.joined(separator: " · "))
         } catch {
@@ -186,6 +189,9 @@ final class Cloud: ObservableObject {
            let userObj = root["user"],
            let userData = try? JSONSerialization.data(withJSONObject: userObj),
            let u = try? JSONDecoder().decode(CloudUser.self, from: userData) {
+            if let dev = root["device"] as? [String: Any], let id = dev["id"] as? String {
+                deviceId = id
+            }
             setUser(u)
         }
     }
@@ -199,7 +205,9 @@ final class Cloud: ObservableObject {
     private func clearToken() {
         CloudToken.delete()
         token = nil
+        deviceId = nil
         setUser(nil)
+        HookManager.shared.handleSignedOut()
     }
 
     private func setUser(_ u: CloudUser?) {

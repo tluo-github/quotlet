@@ -1,6 +1,17 @@
 import SwiftUI
 
 @main
+enum QuotletEntry {
+    static func main() {
+        // `--hook` 命令行模式：在 SwiftUI 启动前直接写 events.jsonl 并退出，不启界面、不联网、永远 exit 0
+        if CommandLine.arguments.contains("--hook") {
+            HookCLI.run()
+            return
+        }
+        QuotletApp.main()
+    }
+}
+
 struct QuotletApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = Store()

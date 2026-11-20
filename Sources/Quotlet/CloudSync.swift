@@ -44,8 +44,11 @@ final class CloudSync: ObservableObject {
     private var sentSessions: [String: String] = [:]
     /// nil = 还没做过全量同步（app 刚启动 / 刚登录）
     private var sentDaily: [String: String]?
+    private var sentHeartbeatSig: String?
     private var heartbeatSent = false
     private var lastRequestAt = Date.distantPast
+    private var capabilities: DeviceCapabilities?
+    private var pendingEvents: [[String: Any]] = []
 
     private var running = false
     private var pendingKick = false
@@ -89,12 +92,37 @@ final class CloudSync: ObservableObject {
         kick()
     }
 
+    func capabilitiesUpdated(_ caps: DeviceCapabilities) {
+        capabilities = caps
+        kick()
+    }
+
+    /// Hook 事件导致会话状态切换时立即上报 `/api/ingest/events`
+    func hookStatusChanged(_ state: HookSessionState, record: HookEventRecord) {
+        var ev: [String: Any] = [
+            "session_id": state.sessionId,
+            "ts": record.ts,
+            "status": state.status,
+        ]
+        if let detail = state.detail, !detail.isEmpty {
+            if !state.isPromptExcerpt || uploadTitles {
+                ev["detail"] = detail
+            }
+        }
+        pendingEvents.append(ev)
+        if pendingEvents.count > 200 {
+            pendingEvents.removeFirst(pendingEvents.count - 200)
+        }
+        kick()
+    }
+
     // MARK: 同步
 
     private func resetSent() {
         sentUsage = [:]
         sentSessions = [:]
         sentDaily = nil
+        sentHeartbeatSig = nil
         heartbeatSent = false
     }
 
@@ -114,9 +142,18 @@ final class CloudSync: ObservableObject {
         guard let token = Cloud.shared.token else { return }
         do {
             var sent = false
-            if !heartbeatSent {
-                try await send("POST", "/api/ingest/heartbeat", ["app_version": Self.appVersion], token: token)
+            let hb = heartbeatPayload()
+            let hbSig = Self.signature(hb)
+            if !heartbeatSent || sentHeartbeatSig != hbSig {
+                try await send("POST", "/api/ingest/heartbeat", hb, token: token)
                 heartbeatSent = true
+                sentHeartbeatSig = hbSig
+                sent = true
+            }
+            if !pendingEvents.isEmpty {
+                let batch = Array(pendingEvents.prefix(200))
+                try await send("POST", "/api/ingest/events", ["events": batch], token: token)
+                pendingEvents.removeFirst(min(batch.count, pendingEvents.count))
                 sent = true
             }
             if let (u, at) = usage {
@@ -150,7 +187,9 @@ final class CloudSync: ObservableObject {
                 if try await syncDaily(l, token: token) { sent = true }
             }
             if !sent && Date().timeIntervalSince(lastRequestAt) >= Self.heartbeatInterval - 5 {
-                try await send("POST", "/api/ingest/heartbeat", ["app_version": Self.appVersion], token: token)
+                let hb = heartbeatPayload()
+                try await send("POST", "/api/ingest/heartbeat", hb, token: token)
+                sentHeartbeatSig = Self.signature(hb)
             }
             lastError = nil
         } catch SyncError.unauthorized {
@@ -239,15 +278,52 @@ final class CloudSync: ObservableObject {
     /// 扫描器在没有标题时填的占位文字，不上传
     private static let untitled: Set<String> = ["（无标题）", "(untitled)", "（無題）", "(제목 없음)"]
 
+    private func heartbeatPayload() -> [String: Any] {
+        var payload: [String: Any] = ["app_version": Self.appVersion]
+        if let capabilities {
+            payload["capabilities"] = capabilities.jsonObject()
+        }
+        if let local {
+            let cutoff = Date().addingTimeInterval(-30 * 86400)
+            var seen = Set<String>()
+            var projects: [String] = []
+            for s in local.sessions where s.end >= cutoff && s.cwd != nil {
+                let p = s.project.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !p.isEmpty && !p.contains("/") && !p.contains("\\") && seen.insert(p).inserted {
+                    projects.append(p)
+                    if projects.count >= 200 { break }
+                }
+            }
+            payload["projects"] = projects
+        }
+        return payload
+    }
+
     private func sessionPayload(_ s: SessionSummary, now: Date) -> [String: Any] {
+        let hookState = HookManager.shared.hookState(for: s.id)
         let active = s.isActive(now: now)
+        let resolvedStatus: String
+        let resolvedStatusAt: Date
+        var resolvedDetail: String? = nil
+
+        if let h = hookState, h.updatedAt >= s.end.addingTimeInterval(-5) {
+            resolvedStatus = h.effectiveStatus(now: now)
+            resolvedStatusAt = h.updatedAt
+            if let detail = h.detail, !detail.isEmpty, (!h.isPromptExcerpt || uploadTitles) {
+                resolvedDetail = detail
+            }
+        } else {
+            resolvedStatus = active ? "running" : "done"
+            resolvedStatusAt = active ? now : s.end
+        }
+
         var p: [String: Any] = [
             "id": s.id,
             "source": s.source.rawValue,
             "project": s.project,
             "model": s.mainModel,
-            "status": active ? "running" : "done",
-            "status_at": Self.ms(active ? now : s.end),
+            "status": resolvedStatus,
+            "status_at": Self.ms(resolvedStatusAt),
             "started_at": Self.ms(s.start),
             "last_activity_at": Self.ms(s.end),
             "tokens_in": s.tokens.input,
@@ -256,6 +332,7 @@ final class CloudSync: ObservableObject {
             "tokens_cache_write": s.tokens.cacheWrite,
             "requests": s.requests,
         ]
+        if let resolvedDetail { p["status_detail"] = resolvedDetail }
         if uploadTitles && !Self.untitled.contains(s.title) { p["title"] = s.title }
         return p
     }
