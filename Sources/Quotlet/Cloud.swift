@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import Foundation
+import IOKit
 import Security
 import LocalAuthentication
 
@@ -131,10 +132,12 @@ final class Cloud: ObservableObject {
         isBusy = true
         defer { isBusy = false }
         do {
+            var devObj: [String: Any] = ["name": Host.current().localizedName ?? "Mac", "kind": "mac"]
+            if let mid = Self.machineId { devObj["machine_id"] = mid }
             let body: [String: Any] = [
                 "code": code,
                 "code_verifier": verifier,
-                "device": ["name": Host.current().localizedName ?? "Mac", "kind": "mac"],
+                "device": devObj,
             ]
             let (data, status) = try await Self.request("POST", "/api/auth/exchange", json: body, token: nil)
             guard status == 200,
@@ -274,6 +277,17 @@ final class Cloud: ObservableObject {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
     }
+
+    /// 稳定的本机指纹（对硬件 IOPlatformUUID 加盐做 SHA-256），改名或重装重登时云端复用同一设备记录
+    nonisolated static let machineId: String? = {
+        let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("IOPlatformExpertDevice"))
+        guard service != 0 else { return nil }
+        defer { IOObjectRelease(service) }
+        guard let uuid = IORegistryEntryCreateCFProperty(service, kIOPlatformUUIDKey as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? String,
+              !uuid.isEmpty else { return nil }
+        let digest = SHA256.hash(data: Data(("quotlet-mac:" + uuid).utf8))
+        return "mac_" + digest.prefix(16).map { String(format: "%02x", $0) }.joined()
+    }()
 }
 
 // MARK: - 钥匙串

@@ -280,7 +280,13 @@ final class CloudSync: ObservableObject {
     private static let untitled: Set<String> = ["（无标题）", "(untitled)", "（無題）", "(제목 없음)"]
 
     private func heartbeatPayload() -> [String: Any] {
-        var payload: [String: Any] = ["app_version": Self.appVersion]
+        var payload: [String: Any] = [
+            "app_version": Self.appVersion,
+            "device_name": Host.current().localizedName ?? "Mac",
+        ]
+        if let mid = Cloud.machineId {
+            payload["machine_id"] = mid
+        }
         if let capabilities {
             payload["capabilities"] = capabilities.jsonObject()
         }
