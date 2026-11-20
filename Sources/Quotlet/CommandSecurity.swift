@@ -247,7 +247,7 @@ struct CommandSecurityValidator {
             let tty = String(trimmed[..<space])
             guard tty != "??", tty != "TTY", !tty.isEmpty else { continue }
             let args = String(trimmed[space...])
-            if args.contains(sessionId) && (args.contains("claude") || args.contains("codex") || args.contains("gemini")) {
+            if args.contains(sessionId) && (args.contains("claude") || args.contains("codex") || args.contains("gemini") || args.contains("agy")) {
                 return true
             }
         }

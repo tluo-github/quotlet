@@ -24,6 +24,13 @@ final class RemoteCommandTests: XCTestCase {
         let geminiNew = try ProviderCommandBuilder.build(source: .gemini, cliPath: "/bin/gemini", mode: .new, sessionId: nil, prompt: "explain")
         XCTAssertEqual(geminiNew.arguments, ["-p", "explain", "-o", "stream-json"])
 
+        let agyNew = try ProviderCommandBuilder.build(source: .gemini, cliPath: "/Users/me/.local/bin/agy", mode: .new, sessionId: nil, prompt: "explain")
+        XCTAssertEqual(agyNew.arguments, ["-p", "explain", "--output-format", "stream-json"])
+
+        let agyResume = try ProviderCommandBuilder.build(source: .gemini, cliPath: "/Users/me/.local/bin/agy", mode: .resume, sessionId: "conv-uuid-1", prompt: "follow up")
+        XCTAssertEqual(agyResume.arguments, ["-p", "follow up", "--conversation", "conv-uuid-1", "--output-format", "stream-json"])
+
+        XCTAssertThrowsError(try ProviderCommandBuilder.build(source: .gemini, cliPath: "/Users/me/.local/bin/agy", mode: .fork, sessionId: "conv-uuid-1", prompt: "fork"))
         XCTAssertThrowsError(try ProviderCommandBuilder.build(source: .gemini, cliPath: "/bin/gemini", mode: .fork, sessionId: "g-1", prompt: "fork"))
     }
 
@@ -64,6 +71,16 @@ final class RemoteCommandTests: XCTestCase {
         let gFail = gpErr.finalize(exitCode: 1, stderrText: "Warning: Basic terminal detected\nError authenticating: IneligibleTierError")
         XCTAssertFalse(gFail.succeeded)
         XCTAssertTrue(gFail.error?.contains("IneligibleTierError") == true)
+
+        // Antigravity CLI (agy) stream-json
+        let ap = ProviderStreamParser(source: .gemini)
+        XCTAssertEqual(ap.consume(line: #"{"event":"init","conversation_id":"0a47852f-ace3-4ccb-aa7f-a02f6240d9e4","init":{"cwd":"/tmp"}}"#), "Antigravity 会话已启动…")
+        XCTAssertEqual(ap.consume(line: #"{"event":"step_update","step_update":{"conversation_id":"0a47852f-ace3-4ccb-aa7f-a02f6240d9e4","step_index":1,"state":"ACTIVE","step_type":"agent_response","text_delta":"AGY_OK"}}"#), "AGY_OK")
+        _ = ap.consume(line: #"{"event":"result","result":{"conversation_id":"0a47852f-ace3-4ccb-aa7f-a02f6240d9e4","status":"SUCCESS","response":"AGY_OK\n","num_turns":1}}"#)
+        let aRes = ap.finalize(exitCode: 0, stderrText: "")
+        XCTAssertTrue(aRes.succeeded)
+        XCTAssertEqual(aRes.summary, "AGY_OK")
+        XCTAssertEqual(aRes.resultSessionId, "0a47852f-ace3-4ccb-aa7f-a02f6240d9e4")
     }
 
     func testSecurityValidatorEnforces30DayAllowlistAndInteractiveConflictProtection() throws {

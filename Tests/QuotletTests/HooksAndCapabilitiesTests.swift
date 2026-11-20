@@ -50,6 +50,24 @@ final class HooksAndCapabilitiesTests: XCTestCase {
         let missingCodex = CLICapabilityProber.probeCodex(path: nil, runner: runner)
         XCTAssertFalse(missingCodex.available)
         XCTAssertNotNil(missingCodex.note)
+
+        // Antigravity CLI (agy) unlocks native resume for Gemini/Antigravity conversations
+        let agyRunner: CLICapabilityProber.CommandRunner = { exe, args, _ in
+            switch (exe, args) {
+            case ("/mock/agy", ["--version"]):
+                return (0, "1.5.13\n", "")
+            case ("/mock/agy", ["--help"]):
+                return (0, "Usage of agy:\n  -p\n  --print\n  --conversation\n  --output-format", "")
+            default:
+                return nil
+            }
+        }
+        let agyCap = CLICapabilityProber.probeGemini(path: "/mock/agy", runner: agyRunner)
+        XCTAssertTrue(agyCap.available)
+        XCTAssertEqual(agyCap.version, "agy 1.5.13")
+        XCTAssertTrue(agyCap.supportsNew)
+        XCTAssertTrue(agyCap.supportsResume)
+        XCTAssertFalse(agyCap.supportsFork)
     }
 
     func testHookCLISanitizesTruncatesAndRotatesEventsFile() throws {

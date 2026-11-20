@@ -52,14 +52,27 @@ enum ProviderCommandBuilder {
             }
 
         case .gemini:
-            switch mode {
-            case .new:
-                return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "-o", "stream-json"])
-            case .resume:
-                guard let sessionId, !sessionId.isEmpty else { throw ProviderRunnerError.missingSessionId }
-                return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "-r", sessionId, "-o", "stream-json"])
-            case .fork:
-                throw ProviderRunnerError.unsupportedMode("Gemini CLI 不支持分支续聊")
+            let isAgy = URL(fileURLWithPath: cliPath).lastPathComponent.lowercased() == "agy"
+            if isAgy {
+                switch mode {
+                case .new:
+                    return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "--output-format", "stream-json"])
+                case .resume:
+                    guard let sessionId, !sessionId.isEmpty else { throw ProviderRunnerError.missingSessionId }
+                    return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "--conversation", sessionId, "--output-format", "stream-json"])
+                case .fork:
+                    throw ProviderRunnerError.unsupportedMode("Antigravity CLI (agy) 暂不支持分支续聊")
+                }
+            } else {
+                switch mode {
+                case .new:
+                    return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "-o", "stream-json"])
+                case .resume:
+                    guard let sessionId, !sessionId.isEmpty else { throw ProviderRunnerError.missingSessionId }
+                    return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "-r", sessionId, "-o", "stream-json"])
+                case .fork:
+                    throw ProviderRunnerError.unsupportedMode("Gemini CLI 不支持分支续聊")
+                }
             }
         }
     }
@@ -102,10 +115,16 @@ final class ProviderStreamParser {
         if rawLines.count < 200 { rawLines.append(trimmed) }
 
         guard let data = trimmed.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let type = obj["type"] as? String else {
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
+
+        // Antigravity CLI (agy) 使用顶层 "event" 字段而非 "type"
+        if source == .gemini, let event = obj["event"] as? String {
+            return parseAgy(event: event, obj: obj)
+        }
+
+        guard let type = obj["type"] as? String else { return nil }
 
         switch source {
         case .claude:
@@ -225,6 +244,63 @@ final class ProviderStreamParser {
             } else if let msg = obj["message"] as? String {
                 errorMessage = msg
             }
+        default:
+            break
+        }
+        return nil
+    }
+
+    private var agyStreamBuffer = ""
+
+    private func parseAgy(event: String, obj: [String: Any]) -> String? {
+        if let cid = obj["conversation_id"] as? String, !cid.isEmpty {
+            resultSessionId = cid
+        }
+        switch event {
+        case "init":
+            lastProgress = "Antigravity 会话已启动…"
+            return lastProgress
+        case "step_update":
+            guard let upd = obj["step_update"] as? [String: Any] else { return nil }
+            if let cid = upd["conversation_id"] as? String, !cid.isEmpty {
+                resultSessionId = cid
+            }
+            let stepType = (upd["step_type"] as? String ?? "").lowercased()
+            if stepType == "agent_response", let delta = upd["text_delta"] as? String, !delta.isEmpty {
+                agyStreamBuffer += delta
+                let trimmed = agyStreamBuffer.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    lastProgress = Self.truncate(trimmed, max: 300)
+                    return lastProgress
+                }
+            } else if !stepType.isEmpty, stepType != "user_input", stepType != "system_message", stepType != "agent_response" {
+                lastProgress = "正在执行步骤：\(stepType)"
+                return lastProgress
+            }
+        case "result":
+            let resObj = (obj["result"] as? [String: Any]) ?? obj
+            if let cid = resObj["conversation_id"] as? String, !cid.isEmpty {
+                resultSessionId = cid
+            }
+            let status = (resObj["status"] as? String ?? "").uppercased()
+            if status == "ERROR" || status == "FAILED" || status == "CANCELLED" {
+                explicitError = true
+                errorMessage = (resObj["error"] as? String)
+                    ?? (resObj["message"] as? String)
+                    ?? (resObj["response"] as? String)
+                    ?? "Antigravity 执行失败（\(status)）"
+            } else if let text = resObj["response"] as? String, !text.isEmpty {
+                finalResultText = text
+            } else if !agyStreamBuffer.isEmpty {
+                finalResultText = agyStreamBuffer
+            }
+        case "error":
+            explicitError = true
+            let errObj = (obj["error"] as? [String: Any])
+            errorMessage = (errObj?["message"] as? String)
+                ?? (obj["error"] as? String)
+                ?? (obj["message"] as? String)
+                ?? "Antigravity 执行出错"
         default:
             break
         }
