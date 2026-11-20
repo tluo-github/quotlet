@@ -28,12 +28,16 @@ quotlet/
 │   ├── QuickUsage.swift          # 主面板「会话」页 SessionsTab 与「统计」页 StatsTab
 │   ├── Advice.swift              # 跨工具额度切换建议卡片（Claude / Codex / Gemini）
 │   ├── Notifier.swift            # macOS 系统通知（快到上限 / 已用完 / 重置已恢复，去重防抖）
-│   ├── Cloud.swift / CloudSync.swift # GitHub OAuth 登录与增量云端上报
+│   ├── Cloud.swift / CloudSync.swift # GitHub OAuth 登录、增量云端上报与 Hook 状态合并
+│   ├── CLICapabilities.swift     # 本机 Claude / Codex / Gemini CLI 能力探测与上报
+│   ├── HookEvents.swift / HookInstaller.swift # --hook 极速命令行分支、events.jsonl 监听与 hooks 安全装卸
+│   ├── CommandSecurity.swift / ProviderRunner.swift # 30 天目录白名单、终端冲突保护、统一三来源执行器与指令审计
+│   ├── CloudRealtime.swift       # /api/ws WebSocket 长连接、离线指令对账与远程指令调度器
 │   ├── Format.swift / Theme.swift# 多语言（zh/en/ja/ko）、时区/日期/模型名格式化与动态浅深色主题
 │   ├── KeychainAccess.swift      # 钥匙串静默读取保护（禁止后台意外弹窗）
 │   ├── Demo.swift / Snapshot.swift / Showcase.swift # 演示脱敏模式与自动截图工具
 │   └── ProviderAssets/           # 品牌图标（claude.png / codex.png / gemini.png）
-├── Tests/QuotletTests/           # 单元测试（估算器、通知去重、吞吐计算、FSEvents、Gemini 解析）
+├── Tests/QuotletTests/           # 单元测试（估算器、通知去重、吞吐计算、FSEvents、Gemini、Hooks、远程指令安全与执行器）
 ├── cloud/                        # Quotlet Cloud（Cloudflare Workers + Hono + D1 + Durable Objects）
 └── site/                         # 官方门户静态站点
 ```
@@ -171,9 +175,11 @@ Quotlet 采用统一抽象：**本地会话/Token/速度**汇聚到 `LocalSnapsh
   - `daily-v1.json`：按 `day|source|model|project` 永久汇总，防止工具自动清理 30 天前日志导致历史丢失；合并时若某日新扫描总量少于存档，保留存档数值。
   - `quota-v1.json`：记录过去 120 天内各来源各窗口的额度采样点（变化 ≥0.5% 或间隔 ≥30 分钟记一笔）。
 - **通知系统 (`Notifier`)**：支持 80/90/95% 预警、100% 耗尽通知，以及在 `resetsAt + 5s` 定时触发「已恢复」提醒；按 `provider|kind|scope|window` 精确去重，容忍服务端重置时间微调抖动。
-- **云同步 (`CloudSync` & `cloud/`)**：
-  - 后端运行在 Cloudflare Workers（Hono + D1 SQLite + Durable Objects），提供 GitHub OAuth 登录、设备管理、数据上报（`/api/ingest/*`）与 Web 仪表盘（`app.quotlet.com`）。
-  - 全面支持 `claude` / `codex` / `gemini` 三来源的额度、会话、每日 token、来源筛选、模型名格式化与网页内阈值告警。
-  - 客户端采用签名去重机制（仅数据变化时上报）+ 2 分钟在线心跳；演示/截图/离线模式自动禁用上报。
+- **云同步与远程指令 (`CloudSync` / `CloudRealtime` / `HookManager` & `cloud/`)**：
+  - 后端运行在 Cloudflare Workers（Hono + D1 SQLite + `UserHub` Durable Object），提供 GitHub OAuth 登录、设备管理、数据上报（`/api/ingest/*`）、WebSocket 实时通道（`/api/ws`）、远程指令接口（`/api/commands*`）与 Web 仪表盘（`app.quotlet.com`）。
+  - 全面支持 `claude` / `codex` / `gemini` 三来源的额度、会话、每日 token、来源筛选、模型名格式化与网页内阈值告警，以及按 Mac 实测能力分发的远程指令。
+  - **精确状态 Hooks**：支持 `Quotlet --hook` 极速命令行分支写 `events.jsonl`，App 内通过 `DispatchSource` 监听并实时上报状态事件；默认关闭，登录后可开，退出登录自动清理。
+  - **远程指令安全边界**：默认关闭且仅目标 Mac 自身 token 可通过 `PATCH /api/devices/:id` 开启；仅允许在近 30 天出现过的项目目录内执行（由 Mac 本机解析规范化路径）；检测终端交互会话避免冲突并引导 `--fork-session`；支持可选本机弹窗确认与 `commands-history.json` 完整审计。
+  - 客户端采用签名去重机制（仅数据变化时上报）+ 2 分钟在线心跳 + WebSocket 实时保活（网页断连自动回退轮询）；演示/截图/离线模式自动禁用联网与远程指令。
 - **官方门户 (`site/`)**：
   - 静态页面 + Cloudflare Worker（`quotlet.com` / `www.quotlet.com`），由 `scripts/deploy-site.sh` 打包 `docs/` 中的四国语言浅/深色 WebP 截图，并自动注入最新 GitHub Release 版本号与 `.dmg` 直链。
