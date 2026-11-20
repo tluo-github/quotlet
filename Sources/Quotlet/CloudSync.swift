@@ -137,6 +137,15 @@ final class CloudSync: ObservableObject {
                         sent = true
                     }
                 }
+                if let g = l.geminiLimits {
+                    let snapshot = UsageSnapshot(limits: g.limitItems(now: Date()), breakdown: [], breakdownStart: nil, extra: nil, plan: g.planTitle)
+                    let (payload, sig) = Self.usagePayload(snapshot, at: g.observedAt, provider: "gemini")
+                    if sentUsage["gemini"] != sig {
+                        try await send("PUT", "/api/ingest/usage", payload, token: token)
+                        sentUsage["gemini"] = sig
+                        sent = true
+                    }
+                }
                 if try await syncSessions(l, token: token) { sent = true }
                 if try await syncDaily(l, token: token) { sent = true }
             }
