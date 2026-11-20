@@ -2,13 +2,13 @@
 
 # Quotlet
 
-**在 macOS 状态栏查看 Claude Code 和 Codex 用量。**
+**在 macOS 状态栏查看 Claude Code、Codex 和 Gemini 额度与实时速度（tok/s）。**
 
 [English](README.md) | 简体中文 | [日本語](README.ja.md) | [한국어](README.ko.md)
 
 > **Quotlet 在 0.4.1 及之前叫 Quotabar。** 那些版本的文件名还是 `Quotabar.app` / `Quotabar-<版本>.dmg`。GitHub 仓库从 `tluo-github/quotabar` 改名为 `tluo-github/quotlet`，旧链接会自动跳转。
 
-Quotlet 默认从本机日志统计 Claude Code 和 Codex 的 token、会话、速度和 API 等值费用，不需要读取登录凭证。Codex 额度也来自本机日志；在设置中主动开启 Claude 额度接口后，才会查询和 `/usage` 一样的 5 小时、每周额度及重置时间。点「历史」可查看详细趋势。
+Quotlet 默认从本机日志与本地服务统计 **Claude Code**、**Codex** 和 **Antigravity（Gemini）** 的 token、会话、实时输出吞吐（tok/s）和 API 等值费用，不需要读取登录凭证。Codex 额度来自本机日志，Gemini 额度来自本机 `127.0.0.1` 的 Antigravity 本地服务并支持离线缓存；在设置中主动开启 Claude 额度接口后，才会查询和 `/usage` 一样的 5 小时、每周额度及重置时间。点「历史」可查看详细趋势。
 
 <p>
   <img src="docs/usage-zh.png" width="32%" alt="面板">
@@ -17,27 +17,28 @@ Quotlet 默认从本机日志统计 Claude Code 和 Codex 的 token、会话、�
 
 <img src="docs/history-zh.png" alt="用量历史">
 
-> Quotlet 是独立的开源项目，不是 Anthropic 官方产品，与 Anthropic 没有关联。"Claude" 是 Anthropic 的商标。
+> Quotlet 是独立的开源项目，与 Anthropic、OpenAI 和 Google 均无关联。Claude、Codex 和 Gemini 分别为各自所有者的商标。
 
 ## 功能
 
-菜单栏面板顶部可直接切换「用量」「会话」「统计」，快速查看最近会话和 7 / 30 天用量，不用打开独立的「用量历史」窗口。
+菜单栏面板顶部实时展示本机全部 AI 输出吞吐（tok/s），下方可直接切换「额度」「会话」「统计」，快速查看三家额度、最近会话和 7 / 30 天用量，不用打开独立的「用量历史」窗口。
 
-- **状态栏一眼看到**：Claude 本地模式显示今日 token；Codex 或已开启接口的 Claude 显示 `5h 41% 周 62%`（也可以只显示 `41% 62%`）。
-- **可选的额度查询**：Claude 接口开启后，显示 5 小时、每周和按模型的额度；Codex 额度直接读取本机日志。一条一行，带重置时间和倒计时。
+- **状态栏一眼看到**：面板顶部与设置页均可随时切换状态栏来源（Claude / Codex / Gemini），支持 `5h 41% 周 62%` 或简洁 `41% 62%`（Claude 本地模式显示今日 token）。
+- **本机全部 AI 实时吞吐**：顶部实时速度仪表与 1 / 2 / 5 分钟输出曲线汇总 Claude、Codex 和 Gemini 并发输出（tok/s），分来源展示实时读数与峰值速度。
+- **三家额度同屏对比**：Claude（可选接口）、Codex（本机日志）和 Gemini（本机 Antigravity 服务 + 离线缓存）的 5 小时、每周及细分模型额度一屏展示，均带重置时间与倒计时。
 - **Claude 实时估算**：同一窗口内至少两次有效接口读数可校准本机 token 与额度变化的比例。查询间隔内随日志新增用量显示 `≈` 估算百分比，下一次接口读数到达后校正。模型、缓存和其他设备的使用会影响估算精度。校准数据保存在本次运行内，窗口重置或套餐变化后重新校准。估算值也参与额度通知，云端额度历史使用接口确认值。
-- **切换推荐**：一家达到提醒阈值、另一家额度充裕时，用量页推荐先用另一家。
-- **今天**：今天 Claude Code 和 Codex 的输出、输入 token、请求数、平均和峰值速度（tok/s），以及 API 等值费用。
-- **用量历史窗口**：按来源和时间段（今天、昨天、7/30/90 天、今年、全部）筛选。项目趋势默认全选，可勾选项目对比折线，悬停查看各项目数值，并切换总 token 或输出 token。仍可查看每日输出、费用和速度、每周额度、模型分布和会话，也可以导出 CSV。每日汇总保存在本机，Claude Code 清理旧日志也不影响历史。
-- **额度通知**：默认开启，达到 90%（可选 80% 或 95%）、用完 100%、重置恢复时提醒。Claude 和 Codex 的 5 小时、周额度均适用，Claude 的本机估算也会触发提醒并注明估算，每个窗口的每类提醒只发一次。首次启动时允许 macOS 通知。
-- **可选的 Quotlet Cloud**：用 GitHub 登录后，在 [app.quotlet.com](https://app.quotlet.com) 的网页和手机上看额度和会话。不登录就不开启。
+- **跨工具切换推荐**：某一家达到提醒阈值而其他来源仍有充裕余量时，额度页顶部自动推荐先用更宽裕的一家。
+- **今天**：今天 Claude Code、Codex 和 Gemini 的输出、输入 token、请求数、平均和峰值速度（tok/s），以及 API 等值费用。
+- **用量历史窗口**：按来源（全部 / Claude Code / Codex / Gemini）和时间段（今天、昨天、7/30/90 天、今年、全部）筛选。支持三家堆叠柱状图叠加速度曲线、项目趋势折线（默认全选，可勾选对比总 token 或输出 token）、每周额度、模型分布和会话表，并可导出 CSV。每日汇总保存在本机，旧日志清理后也不影响历史。
+- **额度通知**：默认开启，达到 90%（可选 80% 或 95%）、用完 100%、重置恢复时提醒。Claude、Codex 和 Gemini 的各窗口均适用，Claude 本机估算也会触发提醒并注明估算，每个窗口的每类提醒只发一次。首次启动时允许 macOS 通知。
+- **可选的 Quotlet Cloud**：用 GitHub 登录后，在 [app.quotlet.com](https://app.quotlet.com) 的网页和手机上统一查看 Claude、Codex 和 Gemini 的额度、会话、用量分析与网页内告警。不登录就不开启。
 - **四种语言**：简体中文、English、日本語、한국어，默认跟随系统，也可以在设置里切换。外观支持浅色、深色和自动。
 - 刷新频率可调，支持 HTTP 代理；连不上 Anthropic 时会提示去设置代理。
 
 ## 系统要求
 
 - macOS 14 Sonoma 或更新，Apple 芯片和 Intel 都支持
-- 本机有 Claude Code 或 Codex 会话日志；查询 Claude 订阅额度时，还需 Claude Code 已用 Pro 或 Max 套餐登录
+- 本机有 Claude Code、Codex 或 Antigravity（Gemini）日志；查询 Claude 订阅额度时，还需 Claude Code 已用 Pro 或 Max 套餐登录
 
 ## 安装
 
@@ -63,17 +64,18 @@ brew install --cask quotlet
 
 ### 装好以后
 
-- 默认从本机 Claude Code 和 Codex 日志统计 token。需要 Claude 额度时，在设置 → 额度接口开启「查询 Claude 额度」。如果系统需要授权，点同一组里的「允许钥匙串访问」。通知默认开启，需允许 macOS 通知权限。已有的明确设置会保留。
+- 默认从本机 Claude Code、Codex 和 Antigravity（Gemini）日志统计 token 与实时速度，并通过本机 `127.0.0.1` 的 Antigravity 服务读取 Gemini 额度。需要 Claude 额度时，在设置 → 额度接口开启「查询 Claude 额度」。如果系统需要授权，点同一组里的「允许钥匙串访问」。通知默认开启，需允许 macOS 通知权限。已有的明确设置会保留。
 - 状态栏上看不到数字的话，可能被系统收进了折叠区。按住 **Command** 把它拖到想要的位置，系统会记住。
-- 设置（面板右下角）里有语言、外观、状态栏样式、刷新频率、开机启动、网络代理和通知。
+- 设置（面板右下角）里有语言、外观、状态栏来源与样式、刷新频率、开机启动、网络代理和通知。
 
 ## 原理
 
 | 内容 | 来源 |
 |---|---|
-| 额度、重置时间 | `api.anthropic.com/api/oauth/usage`，也就是 `/usage` 用的接口 |
-| 会话、token | 本机 `~/.claude/projects` 下的 Claude Code 日志 |
+| Claude 额度、重置时间 | `api.anthropic.com/api/oauth/usage`（可选，默认关闭） |
+| Claude 会话、token | 本机 `~/.claude/projects` 下的 Claude Code 日志 |
 | Codex 的额度、会话、token | 本机 `~/.codex/sessions` 下的 Codex 日志（Codex 从 Claude Code 导入的会话会跳过） |
+| Gemini 的额度、会话、token | 本机 `127.0.0.1` 的 Antigravity 本地服务（`~/.gemini/antigravity/daemon/hub_*.json`，支持离线缓存）与 `~/.gemini/antigravity/brain` 只读日志 |
 
 - 开启 Claude 额度接口后，Quotlet 通过系统钥匙串读取 Claude Code 的登录信息（`Claude Code-credentials`，兼容本机凭证文件），并向 Anthropic 查询额度。只有点「允许钥匙串访问」才可能弹出读取 Claude 凭证的系统授权框。Quotlet Cloud 是独立的可选登录功能，可将额度、token 数量和会话状态（不含提示词和代码）同步到 app.quotlet.com。启动时恢复云登录采用无交互方式。
 - Claude Code 的登录每隔几个小时会过期，下次使用 Claude Code 时会自动续上。Quotlet 提示登录过期时，在 Claude Code 里随便发一句话就行。Quotlet 每分钟重试一次，期间继续显示上一次的数据。

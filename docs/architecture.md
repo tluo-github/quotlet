@@ -172,5 +172,8 @@ Quotlet 采用统一抽象：**本地会话/Token/速度**汇聚到 `LocalSnapsh
   - `quota-v1.json`：记录过去 120 天内各来源各窗口的额度采样点（变化 ≥0.5% 或间隔 ≥30 分钟记一笔）。
 - **通知系统 (`Notifier`)**：支持 80/90/95% 预警、100% 耗尽通知，以及在 `resetsAt + 5s` 定时触发「已恢复」提醒；按 `provider|kind|scope|window` 精确去重，容忍服务端重置时间微调抖动。
 - **云同步 (`CloudSync` & `cloud/`)**：
-  - 后端运行在 Cloudflare Workers（Hono + D1 SQLite + Durable Objects），提供 GitHub OAuth 登录、设备管理、数据上报（`/api/ingest/*`）与 Web 仪表盘。
+  - 后端运行在 Cloudflare Workers（Hono + D1 SQLite + Durable Objects），提供 GitHub OAuth 登录、设备管理、数据上报（`/api/ingest/*`）与 Web 仪表盘（`app.quotlet.com`）。
+  - 全面支持 `claude` / `codex` / `gemini` 三来源的额度、会话、每日 token、来源筛选、模型名格式化与网页内阈值告警。
   - 客户端采用签名去重机制（仅数据变化时上报）+ 2 分钟在线心跳；演示/截图/离线模式自动禁用上报。
+- **官方门户 (`site/`)**：
+  - 静态页面 + Cloudflare Worker（`quotlet.com` / `www.quotlet.com`），由 `scripts/deploy-site.sh` 打包 `docs/` 中的四国语言浅/深色 WebP 截图，并自动注入最新 GitHub Release 版本号与 `.dmg` 直链。

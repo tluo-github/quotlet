@@ -2,13 +2,13 @@
 
 # Quotlet
 
-**Claude Code and Codex usage in the macOS menu bar.**
+**Claude Code, Codex and Gemini usage & live tok/s in the macOS menu bar.**
 
 English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
 > **Quotlet was called Quotabar up to version 0.4.1.** Those releases are still named `Quotabar.app` / `Quotabar-<version>.dmg`. The GitHub repo moved from `tluo-github/quotabar` to `tluo-github/quotlet`; old links redirect.
 
-Quotlet defaults to local logs for Claude Code and Codex tokens, sessions, speed and API-equivalent cost, without reading login credentials. Codex limits also come from local logs. Enable the optional Claude quota API in Settings to fetch the same 5-hour and weekly limits as `/usage`. Click **History** for detailed trends.
+Quotlet tracks **Claude Code**, **Codex** and **Antigravity (Gemini)** tokens, sessions, real-time output throughput (`tok/s`) and API-equivalent cost right from your Mac menu bar — without reading login credentials by default. Codex quotas come from local logs, Gemini quotas from Antigravity's local service (`127.0.0.1`), and optional Claude quota lookup in Settings fetches the same 5-hour and weekly limits as `/usage`. Click **History** for detailed trends.
 
 <p>
   <img src="docs/usage-en.png" width="32%" alt="Panel">
@@ -17,25 +17,26 @@ Quotlet defaults to local logs for Claude Code and Codex tokens, sessions, speed
 
 <img src="docs/history-en.png" alt="Usage history">
 
-> Quotlet is an independent open-source project. It is not made by, affiliated with, or endorsed by Anthropic. "Claude" is a trademark of Anthropic.
+> Quotlet is an independent open-source project, not affiliated with Anthropic, OpenAI or Google. Claude, Codex and Gemini are trademarks of their respective owners.
 
 ## Features
 
-- **Menu bar at a glance**: today's tokens in Claude local mode; `5h 41% Wk 62%` (or just `41% 62%`) for Codex or Claude with the quota API enabled.
-- **Optional quota lookup**: enable the Claude quota API for 5-hour, weekly and per-model limits. Codex limits come directly from local logs. Each limit shows its reset time and countdown.
-- **Switch suggestion**: when one provider reaches your warning threshold and the other has room, the usage tab recommends switching.
-- **Today**: output and input tokens, requests, average and peak speed (tok/s) and the API-equivalent cost of today's Claude Code and Codex use.
-- **Quick sessions and stats**: switch tabs in the menu-bar panel to see recent local sessions or 7/30-day summaries without opening History.
-- **Usage history window**: filter by source and range (today, yesterday, 7/30/90 days, this year, all). Project trends select all projects by default; toggle projects to compare lines, hover for values, and switch between total and output tokens. The window also shows daily output, cost and speed, weekly limits, model breakdowns, and a session table with resume commands. Export to CSV. Daily totals stay on your Mac after Claude Code clears old logs.
-- **Quota notifications**: enabled by default at 90% (80% or 95% also available), at 100%, and after a reset. Both Claude and Codex are covered. Claude estimates can trigger alerts between API refreshes, with an estimate label and one alert of each kind per window. Allow macOS notifications when prompted.
-- **Optional Quotlet Cloud**: sign in with GitHub to see your limits and sessions at [app.quotlet.com](https://app.quotlet.com), on the web or your phone. Off until you sign in.
+- **Menu bar at a glance**: pick Claude, Codex or Gemini right from the panel header or Settings — `5h 41% Wk 62%` (or compact `41% 62%`), or today's tokens when the Claude quota API is off.
+- **Live throughput (`tok/s`)**: real-time speed gauge and 1m / 2m / 5m output chart combining concurrent requests across Claude, Codex and Gemini, with per-provider readings and peak speed.
+- **Three providers, side by side**: 5-hour, weekly and model-specific limits for Claude (optional API), Codex (local logs) and Gemini (Antigravity local service with offline cache), each with reset time and countdown.
+- **Switch suggestion**: when one provider reaches your warning threshold and another has headroom, a banner recommends switching.
+- **Today**: output and input tokens, requests, average and peak speed (`tok/s`) and API-equivalent cost across Claude Code, Codex and Gemini.
+- **Quick sessions and stats**: switch between **Quotas**, **Sessions** and **Stats** right inside the menu-bar panel to inspect recent sessions or 7/30-day summaries without opening History.
+- **Usage history window**: filter by provider and range (today, yesterday, 7/30/90 days, this year, all). Stacked Claude / Codex / Gemini daily charts with speed line, project trends (toggle projects to compare total or output tokens), weekly limits, model breakdowns, session table with resume commands, and CSV export. Daily totals stay on your Mac after old logs are cleared.
+- **Quota notifications**: enabled by default at 90% (80% or 95% also available), at 100%, and after a reset across Claude, Codex and Gemini. Claude local estimates can trigger alerts between API refreshes, with an estimate label and one alert of each kind per window. Allow macOS notifications when prompted.
+- **Optional Quotlet Cloud**: sign in with GitHub to see Claude, Codex and Gemini limits, sessions, analytics and in-page alerts at [app.quotlet.com](https://app.quotlet.com), on the web or your phone. Off until you sign in.
 - **Four languages**: English, 简体中文, 日本語 and 한국어. Follows your system language or pick one in Settings. Light, dark or automatic appearance.
 - Configurable refresh interval and an optional HTTP proxy, with a hint when Anthropic can't be reached.
 
 ## Requirements
 
 - macOS 14 Sonoma or later, Apple silicon or Intel
-- Local Claude Code or Codex session logs; fetching Claude subscription limits additionally requires Claude Code signed in with a Pro or Max plan
+- Local Claude Code, Codex or Antigravity (Gemini) logs; fetching Claude subscription limits additionally requires Claude Code signed in with a Pro or Max plan
 
 ## Install
 
@@ -61,17 +62,18 @@ Update with `brew upgrade --cask quotlet`, remove with `brew uninstall --cask qu
 
 ### After installing
 
-- The default mode reads local Claude Code and Codex logs for token stats. To fetch Claude quota, enable **Settings → Quota API → Fetch Claude quota**. If macOS requires permission, click **Allow Keychain Access** in that same section. Notifications are on by default and require macOS permission. Existing explicit preferences are preserved.
+- The default mode reads local Claude Code, Codex and Antigravity (Gemini) logs for token stats and throughput, and queries Antigravity's local `127.0.0.1` service for Gemini quotas. To fetch Claude quota, enable **Settings → Quota API → Fetch Claude quota**. If macOS requires permission, click **Allow Keychain Access** in that same section. Notifications are on by default and require macOS permission. Existing explicit preferences are preserved.
 - If the numbers don't show up in the menu bar, macOS may have tucked them into the hidden part of the menu bar. Hold **Command** and drag them where you want; macOS remembers the position.
-- Settings (bottom right of the panel): language, appearance, menu bar style, refresh interval, launch at login, proxy and notifications.
+- Settings (bottom right of the panel): language, appearance, menu bar source & style, refresh interval, launch at login, proxy and notifications.
 
 ## How it works
 
 | What | Source |
 |---|---|
-| Limits and reset times | `api.anthropic.com/api/oauth/usage`, the endpoint `/usage` uses |
-| Sessions and tokens | Claude Code's local logs in `~/.claude/projects` |
+| Claude limits and reset times | `api.anthropic.com/api/oauth/usage` (optional, off by default) |
+| Claude sessions and tokens | Claude Code's local logs in `~/.claude/projects` |
 | Codex limits, sessions and tokens | Codex's local logs in `~/.codex/sessions` (sessions Codex imported from Claude Code are skipped) |
+| Gemini limits, sessions and tokens | Antigravity's local daemon on `127.0.0.1` (`~/.gemini/antigravity/daemon/hub_*.json`, cached locally) and read-only logs in `~/.gemini/antigravity/brain` |
 
 - Enabling the Claude quota API lets Quotlet read Claude Code's Keychain login (`Claude Code-credentials`, with local credential-file fallback) and contact Anthropic for quota data. Only the **Allow Keychain Access** button can trigger the macOS prompt for Claude credentials. Quotlet Cloud is a separate optional sign-in: it sends limits, token counts and session status (never prompts or code) to app.quotlet.com. Restoring a Cloud session at startup cannot show a Keychain prompt.
 - Claude Code logins expire every few hours and Claude Code renews them the next time you use it. If Quotlet says your login expired, send any message in Claude Code. Quotlet retries every minute and keeps showing the last data meanwhile.
@@ -120,15 +122,18 @@ swift scripts/make-icon.swift
 
 | File | Purpose |
 |---|---|
-| `UsageAPI.swift` | Keychain login, usage request, proxy |
-| `SessionScanner.swift` | Parses local Claude Code logs |
-| `Store.swift` | Refresh schedule, settings, launch at login |
-| `Views.swift` | Usage, Sessions, Stats and Settings |
-| `Theme.swift` | Colors and type scale |
-| `Format.swift` | Languages, dates, durations, token counts |
-| `Notifier.swift` | Limit notifications |
-| `Snapshot.swift`, `Showcase.swift`, `Demo.swift` | Screenshot, demo-window and sample-data helpers |
+| `UsageAPI.swift`, `KeychainAccess.swift` | Optional Claude Keychain login, usage request, proxy |
+| `ClaudeQuotaEstimator.swift` | Calibrated local Claude quota estimates between API refreshes |
+| `SessionScanner.swift`, `SessionLogWatcher.swift` | FSEvents watcher and concurrent local log scanner |
+| `Codex.swift`, `Gemini.swift` | Local Codex logs and Antigravity (Gemini) RPC + transcript parsing |
+| `Throughput.swift`, `ThroughputView.swift` | Real-time `tok/s` engine, speed gauge and 1m / 2m / 5m chart |
+| `Store.swift`, `Advice.swift`, `Pricing.swift` | App state, cross-provider switch advice and API-equivalent pricing |
+| `Views.swift`, `QuickUsage.swift`, `History.swift`, `HistoryStore.swift` | Panel, Sessions/Stats tabs, History window and local archive |
+| `Cloud.swift`, `CloudSync.swift` | Optional GitHub OAuth sign-in and incremental sync to `app.quotlet.com` |
+| `Theme.swift`, `Format.swift`, `Notifier.swift` | Dynamic theme, 4 languages, formatting and quota notifications |
+| `Snapshot.swift`, `Showcase.swift`, `Demo.swift` | Offscreen screenshot, demo-window and sample-data helpers |
 | `Casks/quotlet.rb` | Homebrew cask |
+| `docs/architecture.md`, `docs/cloud-design.md` | System architecture and Cloud design documentation |
 
 ## License
 
