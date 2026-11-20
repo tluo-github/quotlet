@@ -853,7 +853,7 @@ struct SettingsView: View {
             let items = [
                 "Claude " + (caps.claude.available ? "✓" : "—"),
                 "Codex " + (caps.codex.available ? "✓" : "—"),
-                "Gemini " + (caps.gemini.available ? (caps.gemini.supportsResume ? "✓" : "✓*") : "—"),
+                "Antigravity " + (caps.gemini.available ? "✓" : "—"),
             ].joined(separator: " · ")
             base += " · \(items)"
         }

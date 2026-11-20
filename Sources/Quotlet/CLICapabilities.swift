@@ -110,13 +110,11 @@ enum CLICapabilityProber {
     static func probeAll(searchDirectories: [String] = defaultSearchDirectories(),
                          overrides: [Source: String] = [:],
                          runner: CommandRunner = runSync) -> DeviceCapabilities {
-        let geminiPath = overrides[.gemini]
-            ?? findExecutable(named: "agy", searchDirectories: searchDirectories)
-            ?? findExecutable(named: "gemini", searchDirectories: searchDirectories)
+        let agyPath = overrides[.gemini] ?? findExecutable(named: "agy", searchDirectories: searchDirectories)
         return DeviceCapabilities(
             claude: probeClaude(path: overrides[.claude] ?? findExecutable(named: "claude", searchDirectories: searchDirectories), runner: runner),
             codex: probeCodex(path: overrides[.codex] ?? findExecutable(named: "codex", searchDirectories: searchDirectories), runner: runner),
-            gemini: probeGemini(path: geminiPath, runner: runner)
+            gemini: probeGemini(path: agyPath, runner: runner)
         )
     }
 
@@ -172,54 +170,34 @@ enum CLICapabilityProber {
         )
     }
 
+    /// 仅支持 Antigravity CLI (`agy`)，不再使用 gemini CLI。
     static func probeGemini(path: String?, runner: CommandRunner = runSync) -> ProviderCapability {
         guard let path else {
             return ProviderCapability(
                 available: false, cliPath: nil, version: nil,
                 supportsNew: false, supportsResume: false, supportsFork: false, supportsHooks: false,
-                note: "未检测到 agy（Antigravity CLI）或 gemini CLI"
+                note: "未检测到 Antigravity CLI（agy）"
             )
         }
-        let binaryName = URL(fileURLWithPath: path).lastPathComponent.lowercased()
-        if binaryName == "agy" {
-            let rawVer = firstLine(runner(path, ["--version"], 2.5)?.stdout)
-            let version = rawVer.map { $0.lowercased().contains("agy") ? $0 : "agy \($0)" }
-            let helpOut = runner(path, ["--help"], 2.5)
-            let help = (helpOut?.stdout ?? "") + "\n" + (helpOut?.stderr ?? "")
-            let supportsPrint = help.contains("--print") || help.contains("-p")
-            let supportsStream = help.contains("--output-format")
-            let supportsResume = help.contains("--conversation")
-            let available = supportsPrint && supportsStream
-            return ProviderCapability(
-                available: available,
-                cliPath: path,
-                version: version,
-                supportsNew: available,
-                supportsResume: available && supportsResume,
-                supportsFork: false,
-                supportsHooks: false,
-                note: available
-                    ? "通过 Antigravity CLI (agy) 执行，支持新建与续聊 Antigravity 会话"
-                    : "当前 agy CLI 版本不支持 --print + --output-format stream-json"
-            )
-        }
-
-        let version = firstLine(runner(path, ["--version"], 2.5)?.stdout)
-        let help = runner(path, ["--help"], 2.5)?.stdout ?? ""
-        let supportsHeadless = (help.contains("--prompt") || help.contains("-p")) && help.contains("--output-format")
-        let supportsHooks = help.contains("hooks")
-        // Antigravity 桌面会话存放在 ~/.gemini/antigravity/brain，不与 gemini CLI 互通，因此不宣称可续聊 Antigravity 会话。
+        let rawVer = firstLine(runner(path, ["--version"], 2.5)?.stdout)
+        let version = rawVer.map { $0.lowercased().contains("agy") ? $0 : "agy \($0)" }
+        let helpOut = runner(path, ["--help"], 2.5)
+        let help = (helpOut?.stdout ?? "") + "\n" + (helpOut?.stderr ?? "")
+        let supportsPrint = help.contains("--print") || help.contains("-p")
+        let supportsStream = help.contains("--output-format")
+        let supportsResume = help.contains("--conversation")
+        let available = supportsPrint && supportsStream
         return ProviderCapability(
-            available: supportsHeadless,
+            available: available,
             cliPath: path,
             version: version,
-            supportsNew: supportsHeadless,
-            supportsResume: false,
+            supportsNew: available,
+            supportsResume: available && supportsResume,
             supportsFork: false,
-            supportsHooks: supportsHooks,
-            note: supportsHeadless
-                ? "支持通过 gemini CLI 新建非交互会话（需有效 API Key / Vertex / 订阅认证）；安装 agy CLI 可解锁 Antigravity 续聊"
-                : "当前 gemini CLI 不支持非交互 stream-json 模式"
+            supportsHooks: false,
+            note: available
+                ? "通过 Antigravity CLI (agy) 执行，支持新建与续聊 Antigravity 会话"
+                : "当前 Antigravity CLI (agy) 不支持 --print + --output-format stream-json"
         )
     }
 

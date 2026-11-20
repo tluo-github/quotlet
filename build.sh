@@ -33,12 +33,10 @@ cp Resources/Info.plist "$APP/Contents/"
 cp Sources/Quotlet/ProviderAssets/*.png "$APP/Contents/Resources/"
 [[ -f Resources/AppIcon.icns ]] && cp Resources/AppIcon.icns "$APP/Contents/Resources/"
 
-# Signing identity: Developer ID for releases when available, ad-hoc otherwise.
+# Signing identity: prefer Developer ID Application when available so Keychain ACL stays stable across rebuilds.
 IDENTITY="-"
-if [[ "${1:-}" == "release" ]]; then
-    FOUND=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -1)
-    [[ -n "$FOUND" ]] && IDENTITY="$FOUND"
-fi
+FOUND=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -1)
+[[ -n "$FOUND" ]] && IDENTITY="$FOUND"
 
 if [[ "$IDENTITY" == "-" ]]; then
     codesign --force --sign - "$APP" >/dev/null

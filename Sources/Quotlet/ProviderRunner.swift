@@ -52,27 +52,15 @@ enum ProviderCommandBuilder {
             }
 
         case .gemini:
-            let isAgy = URL(fileURLWithPath: cliPath).lastPathComponent.lowercased() == "agy"
-            if isAgy {
-                switch mode {
-                case .new:
-                    return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "--output-format", "stream-json"])
-                case .resume:
-                    guard let sessionId, !sessionId.isEmpty else { throw ProviderRunnerError.missingSessionId }
-                    return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "--conversation", sessionId, "--output-format", "stream-json"])
-                case .fork:
-                    throw ProviderRunnerError.unsupportedMode("Antigravity CLI (agy) 暂不支持分支续聊")
-                }
-            } else {
-                switch mode {
-                case .new:
-                    return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "-o", "stream-json"])
-                case .resume:
-                    guard let sessionId, !sessionId.isEmpty else { throw ProviderRunnerError.missingSessionId }
-                    return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "-r", sessionId, "-o", "stream-json"])
-                case .fork:
-                    throw ProviderRunnerError.unsupportedMode("Gemini CLI 不支持分支续聊")
-                }
+            // 仅通过 Antigravity CLI (`agy`) 执行
+            switch mode {
+            case .new:
+                return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "--output-format", "stream-json"])
+            case .resume:
+                guard let sessionId, !sessionId.isEmpty else { throw ProviderRunnerError.missingSessionId }
+                return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "--conversation", sessionId, "--output-format", "stream-json"])
+            case .fork:
+                throw ProviderRunnerError.unsupportedMode("Antigravity CLI (agy) 暂不支持分支续聊")
             }
         }
     }

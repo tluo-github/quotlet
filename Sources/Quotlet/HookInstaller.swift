@@ -24,17 +24,11 @@ struct HookInstaller {
     init(claudeSettingsURL: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json"),
          geminiSettingsURL: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/settings.json"),
          executablePath: String = Bundle.main.executablePath ?? CommandLine.arguments.first ?? "/Applications/Quotlet.app/Contents/MacOS/Quotlet",
-         installGeminiHooks: Bool? = nil) {
+         installGeminiHooks: Bool = false) {
         self.claudeSettingsURL = claudeSettingsURL
         self.geminiSettingsURL = geminiSettingsURL
         self.executablePath = executablePath
-        if let installGeminiHooks {
-            self.installGeminiHooks = installGeminiHooks
-        } else {
-            let geminiDir = geminiSettingsURL.deletingLastPathComponent()
-            self.installGeminiHooks = FileManager.default.fileExists(atPath: geminiDir.path)
-                && CLICapabilityProber.findExecutable(named: "gemini") != nil
-        }
+        self.installGeminiHooks = installGeminiHooks
     }
 
     enum InstallState: Equatable {

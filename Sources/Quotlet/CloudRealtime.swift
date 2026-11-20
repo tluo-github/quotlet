@@ -32,6 +32,7 @@ final class RemoteCommandManager: ObservableObject {
     private var userWatch: AnyCancellable?
     private var wsTask: URLSessionWebSocketTask?
     private var wsSession: URLSession?
+    private var wsRouteIndex = 0
     private var pingTask: Task<Void, Never>?
     private var reconnectTask: Task<Void, Never>?
     private var reconnectDelay: TimeInterval = 2
@@ -198,13 +199,14 @@ final class RemoteCommandManager: ObservableObject {
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.timeoutInterval = 20
 
-        let session = Network.sessions(for: url, allowFallback: true).first ?? URLSession(configuration: .ephemeral)
+        let sessions = Network.sessions(for: url, allowFallback: true)
+        let session = sessions.isEmpty ? URLSession(configuration: .ephemeral) : sessions[wsRouteIndex % sessions.count]
         let task = session.webSocketTask(with: req)
         wsSession = session
         wsTask = task
         task.resume()
         isConnecting = false
-        NSLog("[cloud-ws] connecting to %@", url.absoluteString)
+        NSLog("[cloud-ws] connecting to %@ (route %d/%d)", url.absoluteString, (wsRouteIndex % max(sessions.count, 1)) + 1, max(sessions.count, 1))
 
         receiveLoop(for: task)
         startPingLoop(for: task)
@@ -264,6 +266,7 @@ final class RemoteCommandManager: ObservableObject {
         guard wsTask === task else { return }
         wsTask = nil
         wsConnected = false
+        wsRouteIndex += 1
         pingTask?.cancel()
         pingTask = nil
         NSLog("[cloud-ws] disconnected: %@", error.localizedDescription)

@@ -21,9 +21,6 @@ final class RemoteCommandTests: XCTestCase {
 
         XCTAssertThrowsError(try ProviderCommandBuilder.build(source: .codex, cliPath: "/bin/codex", mode: .fork, sessionId: "t-9", prompt: "fork"))
 
-        let geminiNew = try ProviderCommandBuilder.build(source: .gemini, cliPath: "/bin/gemini", mode: .new, sessionId: nil, prompt: "explain")
-        XCTAssertEqual(geminiNew.arguments, ["-p", "explain", "-o", "stream-json"])
-
         let agyNew = try ProviderCommandBuilder.build(source: .gemini, cliPath: "/Users/me/.local/bin/agy", mode: .new, sessionId: nil, prompt: "explain")
         XCTAssertEqual(agyNew.arguments, ["-p", "explain", "--output-format", "stream-json"])
 
@@ -31,7 +28,6 @@ final class RemoteCommandTests: XCTestCase {
         XCTAssertEqual(agyResume.arguments, ["-p", "follow up", "--conversation", "conv-uuid-1", "--output-format", "stream-json"])
 
         XCTAssertThrowsError(try ProviderCommandBuilder.build(source: .gemini, cliPath: "/Users/me/.local/bin/agy", mode: .fork, sessionId: "conv-uuid-1", prompt: "fork"))
-        XCTAssertThrowsError(try ProviderCommandBuilder.build(source: .gemini, cliPath: "/bin/gemini", mode: .fork, sessionId: "g-1", prompt: "fork"))
     }
 
     func testStreamParsersHandleClaudeCodexAndGeminiJSONL() {
