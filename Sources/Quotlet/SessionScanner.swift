@@ -20,24 +20,27 @@ struct TokenCount {
 
 /// 用量来自哪个工具
 enum Source: String, CaseIterable, Identifiable {
-    case claude, codex
+    case claude, codex, gemini
     var id: String { rawValue }
     var title: String {
         switch self {
         case .claude: return "Claude Code"
         case .codex: return "Codex"
+        case .gemini: return "Gemini"
         }
     }
 }
 
 struct MessageUsage {
-    let ts: Date
+    var ts: Date
     let model: String
-    let tokens: TokenCount
+    var tokens: TokenCount
     var project: String = ""
     var source: Source = .claude
     /// 这次回复花的时间：从发出请求（上一条用户消息 / 工具结果）到回复写完。算速度用，拿不到就是 nil。
     var duration: TimeInterval? = nil
+
+    var isFinal = true
 
     /// 算速度用的 (输出 token, 耗时)。输出太少的回复（十几个 token 却等了很久）主要是在读上下文，不计入速度。
     var timed: (output: Int, seconds: TimeInterval)? {
@@ -79,6 +82,10 @@ struct LocalSnapshot {
     let messages: [MessageUsage]     // 按时间正序
     /// Codex 日志里最近一次记下的额度（没装 / 没用过 Codex 就是 nil）
     var codexLimits: CodexLimits? = nil
+    /// Antigravity（Gemini）本地语言服务器或缓存记录的额度
+    var geminiLimits: GeminiLimits? = nil
+
+    var liveActivities: [LiveActivity] = []
 
     static let empty = LocalSnapshot(sessions: [], messages: [])
 
@@ -86,10 +93,14 @@ struct LocalSnapshot {
     func only(_ source: Source) -> LocalSnapshot {
         LocalSnapshot(sessions: sessions.filter { $0.source == source },
                       messages: messages.filter { $0.source == source },
-                      codexLimits: source == .codex ? codexLimits : nil)
+                      codexLimits: source == .codex ? codexLimits : nil,
+                      geminiLimits: source == .gemini ? geminiLimits : nil,
+                      liveActivities: liveActivities.filter { $0.source == source })
     }
 
+    var hasClaude: Bool { messages.contains { $0.source == .claude } }
     var hasCodex: Bool { codexLimits != nil || messages.contains { $0.source == .codex } }
+    var hasGemini: Bool { geminiLimits != nil || messages.contains { $0.source == .gemini } }
 
     func tokens(since: Date) -> (tokens: TokenCount, requests: Int) {
         var t = TokenCount(), n = 0
@@ -139,6 +150,7 @@ private struct FileStats {
     var customTitle: String?
     var lastPrompt: String?
     var messages: [MessageUsage] = []
+    var activity: LiveActivity?
 }
 
 actor SessionScanner {
@@ -148,18 +160,39 @@ actor SessionScanner {
     private var cache: [String: (mtime: Date, size: Int, stats: FileStats)] = [:]
 
     private var codexCache: [String: (mtime: Date, size: Int, stats: CodexFile)] = [:]
+    private var geminiCache: [String: (mtime: Date, size: Int, stats: GeminiFile)] = [:]
 
-    func scan(days: Int = 31) -> LocalSnapshot {
+    func scan(days: Int = 31, forceGeminiQuota: Bool = false) async -> LocalSnapshot {
         let claude = scanClaude(days: days)
         let codex = scanCodex(days: days)
-        var sessions = claude.sessions + codex.sessions
-        var messages = claude.messages + codex.messages
+        let gemini = await scanGemini(days: days, forceQuota: forceGeminiQuota)
+        var sessions = claude.sessions + codex.sessions + gemini.sessions
+        var messages = claude.messages + codex.messages + gemini.messages
         sessions.sort { $0.end > $1.end }
         messages.sort { $0.ts < $1.ts }
-        return LocalSnapshot(sessions: sessions, messages: messages, codexLimits: codex.limits)
+        return LocalSnapshot(sessions: sessions, messages: messages, codexLimits: codex.limits, geminiLimits: gemini.limits,
+                             liveActivities: claude.liveActivities + codex.activities)
     }
 
-    private func scanCodex(days: Int) -> (sessions: [SessionSummary], messages: [MessageUsage], limits: CodexLimits?) {
+    private func scanGemini(days: Int, forceQuota: Bool) async -> (sessions: [SessionSummary], messages: [MessageUsage], limits: GeminiLimits?) {
+        let cutoff = Date().addingTimeInterval(-Double(days) * 86400)
+        let files = GeminiLogs.files(modifiedAfter: cutoff)
+        let metas = GeminiLogs.conversationMetas()
+        var fresh: [String: (mtime: Date, size: Int, stats: GeminiFile)] = [:]
+        for f in files {
+            let path = f.url.path
+            if let c = geminiCache[path], c.mtime == f.mtime, c.size == f.size {
+                fresh[path] = c
+            } else {
+                fresh[path] = (f.mtime, f.size, GeminiLogs.parse(url: f.url, id: f.id))
+            }
+        }
+        geminiCache = fresh
+        let limits = await GeminiAPI.fetchQuota(force: forceQuota)
+        return GeminiLogs.build(fresh.values.map(\.stats), metas: metas, cutoff: cutoff, limits: limits)
+    }
+
+    private func scanCodex(days: Int) -> (sessions: [SessionSummary], messages: [MessageUsage], limits: CodexLimits?, activities: [LiveActivity]) {
         let cutoff = Date().addingTimeInterval(-Double(days) * 86400)
         let files = CodexLogs.files(modifiedAfter: cutoff)
         let imported = CodexLogs.importedThreadIDs()
@@ -177,7 +210,8 @@ actor SessionScanner {
         // 额度取所有文件里最新的一条（不管是不是导入的会话，导入的文件里没有额度）
         let limits = fresh.values.compactMap(\.stats.limits).max { $0.observedAt < $1.observedAt }
         let native = fresh.values.map(\.stats).filter { !$0.id.isEmpty && !imported.contains($0.id) }
-        return CodexLogs.build(native, titles: titles, cutoff: cutoff, limits: limits)
+        let result = CodexLogs.build(native, titles: titles, cutoff: cutoff, limits: limits)
+        return (result.sessions, result.messages, result.limits, native.compactMap(\.activity))
     }
 
     private func scanClaude(days: Int) -> LocalSnapshot {
@@ -269,7 +303,7 @@ actor SessionScanner {
 
         sessions.sort { $0.end > $1.end }
         messages.sort { $0.ts < $1.ts }
-        return LocalSnapshot(sessions: sessions, messages: messages)
+        return LocalSnapshot(sessions: sessions, messages: messages, liveActivities: all.compactMap(\.activity))
     }
 
     // MARK: 单个文件解析
@@ -311,6 +345,7 @@ actor SessionScanner {
         // 同一条回复按内容块拆成多行：key → (在 messages 里的下标, 请求开始时间)
         var seen: [String: (index: Int, start: Date?)] = [:]
         var lastUserTs: Date?
+        var activity = LiveActivity(id: url.path, source: .claude)
 
         func contains(_ p: UnsafeRawPointer, _ len: Int, _ needle: [UInt8]) -> Bool {
             needle.withUnsafeBytes { n in memmem(p, len, n.baseAddress, n.count) != nil }
@@ -323,7 +358,12 @@ actor SessionScanner {
             let isPrompt = !isAssistant && !isAI && !isCustom && contains(p, len, needleLastPrompt)
             if !isAssistant && !isAI && !isCustom && !isPrompt {
                 // 用户消息 / 工具结果：只记时间，作为下一次回复的开始
-                if contains(p, len, needleUser), let ts = quickTimestamp(p, len) { lastUserTs = ts }
+                if contains(p, len, needleUser), let ts = quickTimestamp(p, len) {
+                    lastUserTs = ts
+                    // 中断记录不意味着新请求；只检查固定的协议标记。
+                    let interrupted = Array("[Request interrupted by user".utf8)
+                    activity.update(contains(p, len, interrupted) ? .idle : .generating, at: ts)
+                }
                 return
             }
 
@@ -339,10 +379,21 @@ actor SessionScanner {
                       let tsStr = d["timestamp"] as? String,
                       let ts = isoFrac.date(from: tsStr) ?? isoPlain.date(from: tsStr)
                 else { return }
+                activity.model = model
+                let stop = msg["stop_reason"] as? String
+                activity.update(stop == "tool_use" ? .tools : (stop == nil ? .generating : .idle), at: ts)
                 // 同一条回复按内容块拆成多行，用量相同，按 message.id + requestId 去重；
                 // 结束时间取最后一行的时间
                 let key = (msg["id"] as? String ?? "") + "|" + (d["requestId"] as? String ?? "")
                 if key != "|", let prev = seen[key] {
+                    st.messages[prev.index].ts = max(st.messages[prev.index].ts, ts)
+                    st.messages[prev.index].isFinal = st.messages[prev.index].isFinal || stop != nil
+                    var tokens = st.messages[prev.index].tokens
+                    tokens.input = max(tokens.input, (usage["input_tokens"] as? NSNumber)?.intValue ?? 0)
+                    tokens.output = max(tokens.output, (usage["output_tokens"] as? NSNumber)?.intValue ?? 0)
+                    tokens.cacheRead = max(tokens.cacheRead, (usage["cache_read_input_tokens"] as? NSNumber)?.intValue ?? 0)
+                    tokens.cacheWrite = max(tokens.cacheWrite, (usage["cache_creation_input_tokens"] as? NSNumber)?.intValue ?? 0)
+                    st.messages[prev.index].tokens = tokens
                     if let start = prev.start { st.messages[prev.index].duration = Self.sane(ts.timeIntervalSince(start)) }
                     return
                 }
@@ -354,7 +405,7 @@ actor SessionScanner {
                                    cacheRead: int("cache_read_input_tokens"),
                                    cacheWrite: int("cache_creation_input_tokens"))
                 st.messages.append(MessageUsage(ts: ts, model: model, tokens: t,
-                                                duration: start.flatMap { Self.sane(ts.timeIntervalSince($0)) }))
+                                                duration: start.flatMap { Self.sane(ts.timeIntervalSince($0)) }, isFinal: stop != nil))
                 if st.cwd == nil { st.cwd = d["cwd"] as? String }
             case "ai-title":
                 if let t = d["aiTitle"] as? String, !t.isEmpty { st.aiTitle = t }
@@ -380,6 +431,7 @@ actor SessionScanner {
                 off += len + 1
             }
         }
+        st.activity = activity
         return st
     }
 }

@@ -183,10 +183,20 @@ enum Fmt {
         p == p.rounded() ? "\(Int(p))%" : String(format: "%.1f%%", p)
     }
 
-    /// claude-opus-5-5 → Opus 5.5；claude-sonnet-4-5-20250929 → Sonnet 4.5
+    /// claude-opus-5-5 → Opus 5.5；claude-sonnet-4-5-20250929 → Sonnet 4.5；gemini-4-neon-high → Gemini 4 Neon (High)
     static func modelName(_ id: String) -> String {
         // OpenAI 的模型名本来就好读：gpt-6.2-sol → GPT-6.2-sol
         if id.lowercased().hasPrefix("gpt") { return "GPT" + id.dropFirst(3) }
+        if id.lowercased().hasPrefix("gemini-") {
+            var parts = id.split(separator: "-").map(String.init)
+            var effort: String?
+            if let last = parts.last?.lowercased(), ["low", "medium", "high"].contains(last) {
+                effort = last.prefix(1).uppercased() + last.dropFirst()
+                parts.removeLast()
+            }
+            let base = parts.map { p in p.first?.isLetter == true ? p.prefix(1).uppercased() + p.dropFirst() : p }.joined(separator: " ")
+            return effort.map { "\(base) (\($0))" } ?? base
+        }
         var parts = id.split(separator: "-").map(String.init)
         if parts.first == "claude" { parts.removeFirst() }
         if let last = parts.last, last.count == 8, Int(last) != nil { parts.removeLast() }

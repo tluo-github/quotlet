@@ -134,6 +134,8 @@ final class Store: ObservableObject {
 
     /// Codex 的额度（没装或没用过 Codex 时为空）
     func codexLimits(now: Date) -> [LimitItem] { local?.codexLimits?.limitItems(now: now) ?? [] }
+    /// Gemini 的额度（没装或没用过 Antigravity 时为空）
+    func geminiLimits(now: Date) -> [LimitItem] { local?.geminiLimits?.limitItems(now: now) ?? [] }
     private var timers: [Timer] = []
 
     init() {
@@ -188,6 +190,9 @@ final class Store: ObservableObject {
             CodexLogs.home.appendingPathComponent("archived_sessions"),
             CodexLogs.home.appendingPathComponent("session_index.jsonl"),
             CodexLogs.home.appendingPathComponent("external_agent_session_imports.json"),
+            GeminiLogs.brainDir,
+            GeminiLogs.home.appendingPathComponent("antigravity/daemon"),
+            GeminiLogs.dbPath,
         ]) { [weak self] in self?.refreshLocal() }
         if !Showcase.enabled && !Demo.enabled {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LegacyApp.check() }
@@ -210,12 +215,17 @@ final class Store: ObservableObject {
     }
 
     private var menuBarLimits: (session: LimitItem?, weekly: LimitItem?) {
-        if menuBarSource == .claude {
+        switch menuBarSource {
+        case .claude:
             let displayed = displayedClaudeUsage(now: Date())
             return (displayed?.session, displayed?.weekly)
+        case .codex:
+            let limits = codexLimits(now: Date())
+            return (limits.first { $0.kind == "session" }, limits.first { $0.kind == "weekly_all" })
+        case .gemini:
+            let limits = geminiLimits(now: Date())
+            return (limits.first { $0.kind == "session" }, limits.first { $0.kind == "weekly_all" } ?? limits.first)
         }
-        let limits = codexLimits(now: Date())
-        return (limits.first { $0.kind == "session" }, limits.first { $0.kind == "weekly_all" })
     }
 
     var menuBarShowsWarning: Bool { menuBarSource == .claude && usage == nil && errorMessage != nil }
@@ -229,6 +239,11 @@ final class Store: ObservableObject {
         }
         let limits = menuBarLimits
         guard limits.session != nil || limits.weekly != nil else { return "—" }
+        // Free 套餐等只有周额度时，不显示多余的「5h —」
+        if limits.session == nil, let weekly = limits.weekly?.percentText {
+            if menuBarStyle == "compact" { return weekly }
+            return L("周 \(weekly)", "Wk \(weekly)", ja: "週 \(weekly)", ko: "주 \(weekly)")
+        }
         let session = limits.session?.percentText ?? "—"
         let weekly = limits.weekly?.percentText ?? "—"
         if menuBarStyle == "compact" { return "\(session) \(weekly)" }
@@ -264,7 +279,7 @@ final class Store: ObservableObject {
 
     func refreshAll() {
         refreshUsage()
-        refreshLocal()
+        refreshLocal(forceGeminiQuota: true)
     }
 
     func authorizeClaudeQuota() {
@@ -318,14 +333,14 @@ final class Store: ObservableObject {
         }
     }
 
-    func refreshLocal() {
+    func refreshLocal(forceGeminiQuota: Bool = false) {
         guard !isScanning else {
             pendingLocalRefresh = true
             return
         }
         isScanning = true
         Task {
-            let snap = await scanner.scan(days: Self.scanDays)
+            let snap = await scanner.scan(days: Self.scanDays, forceGeminiQuota: forceGeminiQuota)
             local = Demo.enabled ? Demo.anonymize(snap) : snap
             isScanning = false
             if let displayed = displayedClaudeUsage(now: Date()) { Notifier.shared.evaluate(displayed) }
@@ -334,6 +349,10 @@ final class Store: ObservableObject {
             if let c = snap.codexLimits { HistoryStore.shared.record(provider: "codex", items: c.limitItems(now: Date()), at: c.observedAt) }
             if let c = snap.codexLimits {
                 Notifier.shared.evaluate(provider: "Codex", limits: c.limitItems(now: Date()))
+            }
+            if let g = snap.geminiLimits { HistoryStore.shared.record(provider: "gemini", items: g.limitItems(now: Date()), at: g.observedAt) }
+            if let g = snap.geminiLimits {
+                Notifier.shared.evaluate(provider: "Gemini", limits: g.limitItems(now: Date()))
             }
             CloudSync.shared.localUpdated(snap)   // 演示模式下 CloudSync 自己不上报
             if pendingLocalRefresh {
@@ -390,6 +409,7 @@ final class Store: ObservableObject {
         let now = Date()
         if let u = displayedClaudeUsage(now: now) { Notifier.shared.evaluate(u, now: now) }
         if let c = local?.codexLimits { Notifier.shared.evaluate(provider: "Codex", limits: c.limitItems(now: now), now: now) }
+        if let g = local?.geminiLimits { Notifier.shared.evaluate(provider: "Gemini", limits: g.limitItems(now: now), now: now) }
     }
 
     func sendTestNotification() {

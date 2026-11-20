@@ -64,6 +64,7 @@ struct CodexFile {
     var firstPrompt: String?
     var messages: [MessageUsage] = []
     var limits: CodexLimits?
+    var activity: LiveActivity?
 }
 
 enum CodexLogs {
@@ -117,6 +118,10 @@ enum CodexLogs {
     private static let nTurnContext = needle(#""type":"turn_context""#)
     private static let nTaskStarted = needle(#""type":"task_started""#)
     private static let nUserMessage = needle(#""type":"user_message""#)
+    private static let nTaskComplete = needle(#""type":"task_complete""#)
+    private static let nTaskAborted = needle(#""type":"turn_aborted""#)
+    private static let nFunctionCall = needle(#""type":"function_call""#)
+    private static let nCustomCall = needle(#""type":"custom_tool_call""#)
     private static let nCallOutput = needle(#"_call_output""#)
 
     static func parse(url: URL) -> CodexFile {
@@ -125,6 +130,7 @@ enum CodexLogs {
         var boundary: Date?        // 这次请求从什么时候开始
         var pendingEnd: Date?      // token_usage_record 记下的回复结束时间
         var lastTotal = -1
+        var activity = LiveActivity(id: url.path, source: .codex)
 
         // 类型标记都在每行开头附近（{"timestamp":"…","type":"…","payload":{"type":"…"），只在前 200 字节里找，
         // 避免工具输出的正文里恰好出现这些字样
@@ -136,6 +142,15 @@ enum CodexLogs {
         }
 
         func handle(_ p: UnsafeRawPointer, _ len: Int) {
+            if head(p, len, nTaskComplete) || head(p, len, nTaskAborted) {
+                if let ts = SessionScanner.quickTimestamp(p, len) { activity.update(.idle, at: ts) }
+                boundary = nil
+                return
+            }
+            if head(p, len, nFunctionCall) || head(p, len, nCustomCall) {
+                if let ts = SessionScanner.quickTimestamp(p, len) { activity.update(.tools, at: ts) }
+                return
+            }
             if head(p, len, nTokenCount) {
                 guard let d = json(p, len), let pl = d["payload"] as? [String: Any],
                       let ts = SessionScanner.date(d["timestamp"]) else { return }
@@ -149,6 +164,7 @@ enum CodexLogs {
                                           primary: window("primary"), secondary: window("secondary"), observedAt: ts)
                     if lim.primary != nil || lim.secondary != nil { f.limits = lim }
                 }
+                var recordedResponse = false
                 if let info = pl["info"] as? [String: Any],
                    let total = ((info["total_token_usage"] as? [String: Any])?["total_tokens"] as? NSNumber)?.intValue,
                    total > lastTotal, let last = info["last_token_usage"] as? [String: Any] {
@@ -160,22 +176,30 @@ enum CodexLogs {
                                            cacheRead: cached, cacheWrite: int("cache_write_input_tokens"))
                         let end = pendingEnd ?? ts
                         let dur = boundary.flatMap { SessionScanner.sane(end.timeIntervalSince($0)) }
-                        f.messages.append(MessageUsage(ts: ts, model: f.model ?? "codex", tokens: t, source: .codex, duration: dur))
+                        recordedResponse = true
+                        f.messages.append(MessageUsage(ts: end, model: f.model ?? "codex", tokens: t, source: .codex, duration: dur))
                     }
                 }
                 pendingEnd = nil
+                // 不把相同累计用量的额度刷新当成新回复。
+                if recordedResponse {
+                    if activity.phase == .generating { activity.update(.idle, at: ts) }
+                    boundary = ts
+                }
             } else if head(p, len, nUsageRecord) {
                 pendingEnd = SessionScanner.quickTimestamp(p, len)
             } else if head(p, len, nCallOutput) || head(p, len, nTaskStarted) {
                 boundary = SessionScanner.quickTimestamp(p, len)
+                if let boundary { activity.update(.generating, at: boundary) }
             } else if head(p, len, nUserMessage) {
                 boundary = SessionScanner.quickTimestamp(p, len)
+                if let boundary { activity.update(.generating, at: boundary) }
                 if f.firstPrompt == nil, let d = json(p, len), let pl = d["payload"] as? [String: Any],
                    let msg = pl["message"] as? String, !msg.isEmpty {
                     f.firstPrompt = msg
                 }
             } else if head(p, len, nTurnContext) {
-                if let d = json(p, len), let pl = d["payload"] as? [String: Any], let m = pl["model"] as? String { f.model = m }
+                if let d = json(p, len), let pl = d["payload"] as? [String: Any], let m = pl["model"] as? String { f.model = m; activity.model = m }
             } else if head(p, len, nSessionMeta) {
                 if let d = json(p, len), let pl = d["payload"] as? [String: Any] {
                     f.id = pl["id"] as? String ?? ""
@@ -198,6 +222,7 @@ enum CodexLogs {
                 off += len + 1
             }
         }
+        f.activity = activity
         return f
     }
 

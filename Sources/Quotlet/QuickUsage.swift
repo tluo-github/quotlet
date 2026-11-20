@@ -118,7 +118,7 @@ private struct SessionRow: View {
                         .font(Theme.caption).monospacedDigit()
                 }
                 UsageBar(fraction: Double(s.tokens.total) / Double(max(1, maxTokens)), marker: nil,
-                         color: s.source == .codex ? Theme.codex : Theme.data, height: 2)
+                         color: s.source == .codex ? Theme.codex : s.source == .gemini ? Theme.gemini : Theme.data, height: 2)
                     .padding(.top, 2)
             }
         }

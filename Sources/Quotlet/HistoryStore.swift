@@ -110,7 +110,7 @@ final class HistoryStore: ObservableObject {
         guard !items.isEmpty else { return }
         var changed = false
         for it in items {
-            let kind = it.kind == "weekly_scoped" ? "weekly_scoped:\(it.scope ?? "")" : it.kind
+            let kind = it.kind.hasSuffix("_scoped") ? "\(it.kind):\(it.scope ?? "")" : it.kind
             let last = quota.last { $0.provider == provider && $0.kind == kind }
             if let last, abs(last.percent - it.percent) < 0.5, ts.timeIntervalSince(last.ts) < 1800 { continue }
             quota.append(QuotaReading(ts: ts, provider: provider, kind: kind, percent: it.percent))

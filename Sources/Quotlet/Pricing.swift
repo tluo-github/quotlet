@@ -29,6 +29,15 @@ enum Pricing {
         ("claude-sonnet-4", .init(input: 3, output: 15, cacheRead: 0.30, cacheWrite: 3.75)),
         ("claude-haiku-5-5", .init(input: 0.10, output: 0.50, cacheRead: 0.01, cacheWrite: 0.125)),
         ("claude-haiku-4-5", .init(input: 1, output: 5, cacheRead: 0.10, cacheWrite: 1.25)),
+        // Gemini 模型官方 API 标价（美元 / 百万 token）；未公开 API 定价的内部预览代号不估算，按未知处理
+        ("gemini-3.8-flash", .init(input: 0.075, output: 0.30, cacheRead: 0.01875, cacheWrite: 0)),
+        ("gemini-3.1-pro", .init(input: 1.25, output: 5.0, cacheRead: 0.3125, cacheWrite: 0)),
+        ("gemini-3.0-pro", .init(input: 1.25, output: 5.0, cacheRead: 0.3125, cacheWrite: 0)),
+        ("gemini-2.5-pro", .init(input: 1.25, output: 5.0, cacheRead: 0.3125, cacheWrite: 0)),
+        ("gemini-2.5-flash", .init(input: 0.15, output: 0.60, cacheRead: 0.0375, cacheWrite: 0)),
+        ("gemini-2.0-flash", .init(input: 0.10, output: 0.40, cacheRead: 0.025, cacheWrite: 0)),
+        ("gemini-1.5-pro", .init(input: 1.25, output: 5.0, cacheRead: 0.3125, cacheWrite: 0)),
+        ("gemini-1.5-flash", .init(input: 0.075, output: 0.30, cacheRead: 0.01875, cacheWrite: 0)),
     ]
 
     static func price(for model: String) -> Price? {

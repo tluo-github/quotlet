@@ -13,6 +13,8 @@ struct LimitItem: Identifiable {
     let resetsAt: Date?
     /// weekly_scoped 的范围名（Opus / Sonnet …），上报给网站自己拼标题
     var scope: String? = nil
+    /// 补充说明（如该配额组包含的具体模型），仅用于悬浮提示，不影响通知标题
+    var detail: String? = nil
     var isEstimated = false
 
     var percentText: String {

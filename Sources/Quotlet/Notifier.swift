@@ -94,7 +94,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let d = UserDefaults.standard
         let resetPrefix = Self.resetPrefix + provider.lowercased() + "|"
         let limits = items.filter {
-            ($0.kind == "session" || $0.kind.hasPrefix("weekly")) && ($0.resetsAt.map { $0 > now } ?? true)
+            ($0.kind.hasPrefix("session") || $0.kind.hasPrefix("daily") || $0.kind.hasPrefix("weekly"))
+                && ($0.resetsAt.map { $0 > now } ?? true)
         }
         let signature = "\(d.bool(forKey: Key.low))|\(d.bool(forKey: Key.full))|\(d.bool(forKey: Key.reset))|\(Self.lowThreshold)|"
             + limits.map { "\(Self.windowKey(provider: provider, item: $0))|\($0.percent >= Self.lowThreshold)|\($0.percent >= 100)|\($0.isEstimated)" }.sorted().joined(separator: ";")
@@ -103,7 +104,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         var sent = d.stringArray(forKey: Key.sent) ?? []
 
         for item in limits {
-            let base = Self.windowKey(provider: provider, item: item)
+            Self.updateAlertWindow(provider: provider, item: item, sent: &sent, now: now)
             let title = item.title.hasPrefix(provider) ? item.title : "\(provider) · \(item.title)"
             let when = item.resetsAt.map { r in
                 L("\(Fmt.resetMoment(r, now: now)) 重置 · \(Fmt.countdown(to: r, now: now))",
@@ -117,8 +118,8 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                 : when
 
             if item.percent >= 100 {
-                let key = base + "|full"
-                if d.bool(forKey: Key.full), !sent.contains(key) {
+                if d.bool(forKey: Key.full),
+                   let key = Self.recordAlert(provider: provider, item: item, event: .full, sent: &sent, now: now) {
                     post(id: key,
                          title: item.isEstimated
                             ? L("\(title)：预计已用完", "\(title): estimated limit reached", ja: "\(title)：上限到達の推定", ko: "\(title): 예상 한도 도달")
@@ -126,24 +127,23 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
                          body: body)
                 }
                 if d.bool(forKey: Key.full) {
-                    sent.append(contentsOf: [key, base + "|low"])   // 用完时不再补发「快到上限」
+                    // 用完时不再补发「快到上限」。
+                    _ = Self.recordAlert(provider: provider, item: item, event: .low, sent: &sent, now: now)
                 }
             }
             if Self.shouldWarn(item: item, threshold: Self.lowThreshold, lowEnabled: d.bool(forKey: Key.low),
-                               fullEnabled: d.bool(forKey: Key.full), now: now) {
-                let key = base + "|low"
-                if d.bool(forKey: Key.low), !sent.contains(key) {
-                    post(id: key,
-                         title: L("\(title)：已用 \(item.percentText)，快到上限",
-                                  "\(title): \(item.percentText) used, nearing the limit",
-                                  ja: "\(title)：\(item.percentText) 使用、上限が近づいています",
-                                  ko: "\(title): \(item.percentText) 사용, 한도에 가까워짐"),
-                         body: body)
-                }
-                if d.bool(forKey: Key.low) { sent.append(key) }
+                               fullEnabled: d.bool(forKey: Key.full), now: now),
+               let key = Self.recordAlert(provider: provider, item: item, event: .low, sent: &sent, now: now) {
+                post(id: key,
+                     title: L("\(title)：已用 \(item.percentText)，快到上限",
+                              "\(title): \(item.percentText) used, nearing the limit",
+                              ja: "\(title)：\(item.percentText) 使用、上限が近づいています",
+                              ko: "\(title): \(item.percentText) 사용, 한도에 가까워짐"),
+                     body: body)
             }
         }
-        d.set(Array(Set(sent)).suffix(300).map { $0 }, forKey: Key.sent)
+        var seen: Set<String> = []
+        d.set(Array(sent.filter { seen.insert($0).inserted }.suffix(300)), forKey: Key.sent)
 
         // 「已恢复」：达到用户设置的阈值后，在重置时间安排通知。
         resetGenerations[provider, default: 0] += 1
@@ -151,7 +151,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         center.getPendingNotificationRequests { pending in
             DispatchQueue.main.async {
                 guard self.resetGenerations[provider] == generation else { return }
-                let old = pending.map(\.identifier).filter { $0.hasPrefix(resetPrefix) || ($0.hasPrefix(Self.resetPrefix) && !$0.hasPrefix("reset|claude|") && !$0.hasPrefix("reset|codex|")) }
+                let old = pending.map(\.identifier).filter { $0.hasPrefix(resetPrefix) || ($0.hasPrefix(Self.resetPrefix) && !$0.hasPrefix("reset|claude|") && !$0.hasPrefix("reset|codex|") && !$0.hasPrefix("reset|gemini|")) }
                 center.removePendingNotificationRequests(withIdentifiers: old)
                 guard d.bool(forKey: Key.reset) else { return }
                 for item in limits where item.percent >= Self.lowThreshold {
@@ -173,6 +173,42 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
 
     static func windowKey(provider: String, item: LimitItem) -> String {
         "\(provider)|\(item.kind)|\(item.scope ?? "")|\(Int(item.resetsAt?.timeIntervalSince1970 ?? 0))"
+    }
+
+    enum AlertEvent: String { case low, full }
+
+    /// 每次读数都同步已发提醒的周期边界，包括用量回落到告警阈值以下时。
+    static func updateAlertWindow(provider: String, item: LimitItem, sent: inout [String], now: Date) {
+        guard let reset = item.resetsAt, reset > now else { return }
+        let prefix = "\(provider)|\(item.kind)|\(item.scope ?? "")|"
+        var seen: Set<String> = []
+        sent = sent.map { previous in
+            guard previous.hasPrefix(prefix) else { return previous }
+            let parts = previous.dropFirst(prefix.count).split(separator: "|")
+            guard parts.count == 2, AlertEvent(rawValue: String(parts[1])) != nil,
+                  let timestamp = TimeInterval(parts[0]), timestamp == 0 || timestamp > now.timeIntervalSince1970 else { return previous }
+            return windowKey(provider: provider, item: item) + "|" + parts[1]
+        }.filter { seen.insert($0).inserted }
+    }
+
+    /// 重置时间会被接口修正，不能用修正幅度判断是不是新周期。
+    /// 同一额度窗口已有尚未到期的提醒时只更新它的重置时间，不再次发送。
+    /// 缺失重置时间后补齐也沿用原提醒；旧周期过期后允许新周期提醒。
+    static func recordAlert(provider: String, item: LimitItem, event: AlertEvent,
+                            sent: inout [String], now: Date) -> String? {
+        updateAlertWindow(provider: provider, item: item, sent: &sent, now: now)
+        let key = windowKey(provider: provider, item: item) + "|" + event.rawValue
+        guard !sent.contains(key) else { return nil }
+        let prefix = "\(provider)|\(item.kind)|\(item.scope ?? "")|"
+        let suffix = "|" + event.rawValue
+        let alreadySent = sent.contains { previous in
+            guard previous.hasPrefix(prefix), previous.hasSuffix(suffix),
+                  let timestamp = TimeInterval(previous.dropFirst(prefix.count).dropLast(suffix.count)) else { return false }
+            return timestamp == 0 || timestamp > now.timeIntervalSince1970
+        }
+        guard !alreadySent else { return nil }
+        sent.append(key)
+        return key
     }
 
     static func shouldWarn(item: LimitItem, threshold: Double, lowEnabled: Bool, fullEnabled: Bool, now: Date) -> Bool {
@@ -210,6 +246,12 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         content.title = title
         content.body = body
         content.sound = .default
-        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+        center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil)) { error in
+            if let error {
+                NSLog("[notifications] failed id=%@ error=%@", id, error.localizedDescription)
+            } else {
+                NSLog("[notifications] posted id=%@ title=%@", id, title)
+            }
+        }
     }
 }

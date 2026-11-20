@@ -1,12 +1,12 @@
 import AppKit
 import SwiftUI
 
-/// 录演示视频用：`Quotlet --showcase` 在屏幕左上角 (60, 60) 开一个 420×770 的窗口，
+/// 录演示视频用：`Quotlet --showcase` 在屏幕左上角 (60, 60) 开一个 420pt 宽的窗口，
 /// 里面是干净的背景、一条仿状态栏和真实的面板。点状态栏标签打开 / 关闭面板。
 /// 窗口位置固定，方便脚本按坐标操作鼠标录屏。
 enum Showcase {
     static let origin = CGPoint(x: 60, y: 60)          // 左上角，屏幕坐标（左上为原点）
-    static let size = CGSize(width: 420, height: 770)
+    static let size = CGSize(width: 420, height: ContentView.panelHeight + 90)
     static var enabled: Bool { CommandLine.arguments.contains("--showcase") }
     private static var window: NSWindow?
 

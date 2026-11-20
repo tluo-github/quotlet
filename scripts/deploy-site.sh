@@ -29,6 +29,16 @@ for lang in en zh ja ko; do
     cwebp -quiet -q 82 -resize 720 0 "docs/${page}-${lang}.png" -o "$OUT/assets/${page}-${lang}.webp"
   done
   cwebp -quiet -q 82 -resize 1440 0 "docs/history-${lang}.png" -o "$OUT/assets/history-${lang}.webp"
+  for page in panel usage settings history; do
+    width=720; [[ $page != history ]] || width=1440
+    for mode in light dark; do
+      source="docs/${page}-${lang}.png"
+      if [[ $page == panel && $mode == light ]] || [[ $page != panel && $mode == dark ]]; then
+        source="docs/${page}-${lang}-${mode}.png"
+      fi
+      cwebp -quiet -q 82 -resize "$width" 0 "$source" -o "$OUT/assets/${page}-${lang}-${mode}.webp"
+    done
+  done
 done
 
 du -sh "$OUT"

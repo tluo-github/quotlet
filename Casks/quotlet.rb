@@ -1,10 +1,10 @@
 cask "quotlet" do
-  version "0.6.1"
-  sha256 "ee9b3d83b2d4ccf5b85c5bca74545839d85a87ce613ff28cafc8645db6bf0d68"
+  version "0.7.0"
+  sha256 "0d7269141298aee8a1e6a6c07c75d159757880b979dd4023d1fd3c4077f1527e"
 
   url "https://github.com/tluo-github/quotlet/releases/download/v#{version}/Quotlet-#{version}.zip"
   name "Quotlet"
-  desc "Claude and Codex usage limits in the menu bar"
+  desc "Claude, Codex, and Gemini usage limits and live tok/s in the menu bar"
   homepage "https://quotlet.com"
 
   depends_on macos: :sonoma

@@ -34,6 +34,7 @@ enum Demo {
                                   subagentTokens: s.subagentTokens, requests: s.requests, mainModel: s.mainModel, source: s.source)
         }
         let messages = snap.messages.map { m -> MessageUsage in var m = m; m.project = fake(m.project); return m }
-        return LocalSnapshot(sessions: sessions, messages: messages, codexLimits: snap.codexLimits)
+        return LocalSnapshot(sessions: sessions, messages: messages, codexLimits: snap.codexLimits,
+                             geminiLimits: snap.geminiLimits, liveActivities: snap.liveActivities)
     }
 }

@@ -77,13 +77,14 @@ enum HistoryRange: String, CaseIterable, Identifiable {
 }
 
 enum SourceFilter: String, CaseIterable, Identifiable {
-    case all, claude, codex
+    case all, claude, codex, gemini
     var id: String { rawValue }
     var title: String {
         switch self {
         case .all: return L("全部来源", "All sources", ja: "すべてのソース", ko: "모든 소스")
         case .claude: return "Claude Code"
         case .codex: return "Codex"
+        case .gemini: return "Gemini"
         }
     }
     func includes(_ s: Source) -> Bool { self == .all || s.rawValue == rawValue }
@@ -109,14 +110,16 @@ struct HistoryBucket: Identifiable {
     let start: Date
     var claude = UsageStats()
     var codex = UsageStats()
+    var gemini = UsageStats()
     var total: UsageStats {
         var t = claude
         t.tokens += codex.tokens
-        t.requests += codex.requests
-        t.cost += codex.cost
-        t.unpricedRequests += codex.unpricedRequests
-        t.timedOutput += codex.timedOutput
-        t.timedSeconds += codex.timedSeconds
+        t.tokens += gemini.tokens
+        t.requests += codex.requests + gemini.requests
+        t.cost += codex.cost + gemini.cost
+        t.unpricedRequests += codex.unpricedRequests + gemini.unpricedRequests
+        t.timedOutput += codex.timedOutput + gemini.timedOutput
+        t.timedSeconds += codex.timedSeconds + gemini.timedSeconds
         return t
     }
 }
@@ -196,7 +199,13 @@ struct HistoryData {
                 if m.ts >= prevStart && m.ts < start { previous.add(m) }
                 guard m.ts >= start && m.ts < end else { continue }
                 let k = bucketStart(m.ts)
-                if m.source == .claude { buckets[k]?.claude.add(m) } else { buckets[k]?.codex.add(m) }
+                if m.source == .claude {
+                    buckets[k]?.claude.add(m)
+                } else if m.source == .codex {
+                    buckets[k]?.codex.add(m)
+                } else if m.source == .gemini {
+                    buckets[k]?.gemini.add(m)
+                }
                 total.add(m)
                 addProject(m.project, k, m.source, m.tokens)
                 var e = models[m.model] ?? (m.source.rawValue, 0, 0, 0)
@@ -212,7 +221,13 @@ struct HistoryData {
                 if d >= prevStart && d < start { previous.add(row: r) }
                 guard d >= start && d < end else { continue }
                 let k = bucketStart(d)
-                if r.source == Source.claude.rawValue { buckets[k]?.claude.add(row: r) } else { buckets[k]?.codex.add(row: r) }
+                if r.source == Source.claude.rawValue {
+                    buckets[k]?.claude.add(row: r)
+                } else if r.source == Source.codex.rawValue {
+                    buckets[k]?.codex.add(row: r)
+                } else if r.source == Source.gemini.rawValue {
+                    buckets[k]?.gemini.add(row: r)
+                }
                 total.add(row: r)
                 if let provider = Source(rawValue: r.source) { addProject(r.project, k, provider, r.tokens) }
                 var e = models[r.model] ?? (r.source, 0, 0, 0)
@@ -504,9 +519,10 @@ private struct UsageChartCard: View {
     var body: some View {
         let points = data.buckets.flatMap { b -> [Point] in
             [Point(id: "c\(b.start.timeIntervalSince1970)", start: b.start, source: "Claude Code", value: value(b.claude)),
-             Point(id: "x\(b.start.timeIntervalSince1970)", start: b.start, source: "Codex", value: value(b.codex))]
+             Point(id: "x\(b.start.timeIntervalSince1970)", start: b.start, source: "Codex", value: value(b.codex)),
+             Point(id: "g\(b.start.timeIntervalSince1970)", start: b.start, source: "Gemini", value: value(b.gemini))]
         }
-        let stacked = data.buckets.map { value($0.claude) + value($0.codex) }
+        let stacked = data.buckets.map { value($0.claude) + value($0.codex) + value($0.gemini) }
         let yMax = niceMax(stacked.max() ?? 0)
         let speeds = data.buckets.map { $0.total.avgSpeed }
         let speedMax = niceMax((speeds.compactMap { $0 }.max() ?? 0) * 1.1, minimum: 50)
@@ -523,6 +539,7 @@ private struct UsageChartCard: View {
                     .fixedSize()
                     legend("Claude Code", Theme.data)
                     legend("Codex", Theme.codex)
+                    legend("Gemini", Theme.gemini)
                     Spacer()
                     HStack(spacing: 6) {
                         Rectangle().fill(Color.primary).frame(width: 16, height: 2)
@@ -548,7 +565,7 @@ private struct UsageChartCard: View {
                         }
                     }
                 }
-                .chartForegroundStyleScale(["Claude Code": Theme.data, "Codex": Theme.codex])
+                .chartForegroundStyleScale(["Claude Code": Theme.data, "Codex": Theme.codex, "Gemini": Theme.gemini])
                 .chartLegend(.hidden)
                 .chartYScale(domain: 0...yMax)
                 .chartYAxis {
@@ -908,7 +925,7 @@ private struct BreakdownCard: View {
                     ForEach(data.models, id: \.name) { m in
                         BarRow(name: m.name, value: Fmt.tokens(m.output) + (m.speed.map { " · \(Fmt.speed($0)) tok/s" } ?? ""),
                                fraction: Double(m.output) / Double(max(1, top)),
-                               color: m.source == Source.codex.rawValue ? Theme.codex : Theme.data, valueWidth: 120)
+                               color: m.source == Source.codex.rawValue ? Theme.codex : m.source == Source.gemini.rawValue ? Theme.gemini : Theme.data, valueWidth: 120)
                     }
                 }
             }
@@ -1062,7 +1079,7 @@ private struct SessionTableRow: View {
             Text(s.project).lineLimit(1).truncationMode(.middle)
                 .frame(width: c.project, alignment: .leading).help(s.project)
             HStack(spacing: 5) {
-                Circle().fill(s.source == .codex ? Theme.codex : Theme.data).frame(width: 7, height: 7)
+                Circle().fill(s.source == .codex ? Theme.codex : s.source == .gemini ? Theme.gemini : Theme.data).frame(width: 7, height: 7)
                 Text(s.source.title).lineLimit(1)
             }
             .frame(width: c.source, alignment: .leading)
@@ -1070,7 +1087,7 @@ private struct SessionTableRow: View {
             Text(Fmt.sessionTime(s.start, now: now)).lineLimit(1).frame(width: c.start, alignment: .leading)
             Text(Fmt.compactDuration(s.end.timeIntervalSince(s.start))).lineLimit(1).frame(width: c.duration, alignment: .leading)
             UsageBar(fraction: Double(s.tokens.total) / Double(max(1, top)), marker: nil,
-                     color: s.source == .codex ? Theme.codex : Theme.data, height: 4)
+                     color: s.source == .codex ? Theme.codex : s.source == .gemini ? Theme.gemini : Theme.data, height: 4)
                 .frame(width: c.progress)
                 .help(L("相对当前列表中最大会话的总 token 用量", "Total tokens relative to the largest session in this list", ja: "この一覧の最大セッションに対する合計トークン", ko: "현재 목록의 최대 세션 대비 총 토큰 사용량"))
             tokenCell(s.tokens.input, width: c.input)
@@ -1113,11 +1130,18 @@ extension View {
     }
 
     private func rawID(_ s: SessionSummary) -> String {
-        s.source == .codex && s.id.hasPrefix("codex-") ? String(s.id.dropFirst(6)) : s.id
+        if s.source == .codex && s.id.hasPrefix("codex-") { return String(s.id.dropFirst(6)) }
+        if s.source == .gemini && s.id.hasPrefix("gemini-") { return String(s.id.dropFirst(7)) }
+        return s.id
     }
 
     private func resumeCommand(_ s: SessionSummary) -> String {
-        let cmd = s.source == .codex ? "codex resume \(rawID(s))" : "claude --resume \(rawID(s))"
+        let cmd: String
+        switch s.source {
+        case .codex: cmd = "codex resume \(rawID(s))"
+        case .claude: cmd = "claude --resume \(rawID(s))"
+        case .gemini: cmd = "open -a Antigravity"
+        }
         return s.cwd.map { "cd '" + $0.replacingOccurrences(of: "'", with: "'\\''") + "' && " + cmd } ?? cmd
     }
 

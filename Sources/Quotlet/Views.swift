@@ -10,8 +10,8 @@ struct ContentView: View {
     @State private var tab: Tab
     @State private var showSettings: Bool
     /// 整个面板的固定高度。高度若在面板打开后再变，macOS 会固定窗口底边，顶边就会离开状态栏出现空隙，
-    /// 所以不做动态高度；内容放不下时在里面滚动。
-    static let panelHeight: CGFloat = min(680, (NSScreen.main?.visibleFrame.height ?? 720) - 24)
+    /// 默认留足三个来源的额度和今日汇总；小屏幕限制在可用高度内，溢出内容仍可滚动。
+    static let panelHeight: CGFloat = min(860, (NSScreen.main?.visibleFrame.height ?? 900) - 24)
 
     init(startInSettings: Bool = false, initialTab: Tab = .usage) {
         _showSettings = State(initialValue: startInSettings)
@@ -23,7 +23,7 @@ struct ContentView: View {
 
         var title: String {
             switch self {
-            case .usage: return L("用量", "Usage", ja: "使用量", ko: "사용량")
+            case .usage: return L("额度", "Quotas", ja: "使用枠", ko: "한도")
             case .sessions: return L("会话", "Sessions", ja: "セッション", ko: "세션")
             case .stats: return L("统计", "Stats", ja: "統計", ko: "통계")
             }
@@ -38,13 +38,22 @@ struct ContentView: View {
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     header
-                    ChipPicker(options: Tab.allCases.map { ($0, $0.title) }, selection: $tab)
                 }
                     .padding(.horizontal, 14)
                     .padding(.top, 12)
                     .padding(.bottom, 8)
 
+                ThroughputView(snapshot: store.local ?? .empty, isLoading: store.local == nil)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 2)
+                    .padding(.bottom, 8)
+                    .id(store.language)
+
                 Hairline()
+                ChipPicker(options: Tab.allCases.map { ($0, $0.title) }, selection: $tab)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
                 TimelineView(.periodic(from: .now, by: 30)) { ctx in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 12) {
@@ -62,7 +71,8 @@ struct ContentView: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
                     }
-                    .scrollIndicators(.automatic)
+                    .scrollIndicators(.hidden)
+                    .scrollBounceBehavior(.basedOnSize)
                     .id(tab)
                 }
                 .frame(maxHeight: .infinity)
@@ -72,16 +82,17 @@ struct ContentView: View {
                 footer
             }
         }
-        .frame(width: 340, height: Self.panelHeight)
+        .frame(width: 360, height: Self.panelHeight)
         .background(Theme.surface)
         .onAppear { store.refreshIfStale() }
     }
 
     private var header: some View {
         HStack(spacing: 8) {
-            ChipPicker(options: [(Source.claude, "Claude"), (.codex, "Codex")], selection: $store.menuBarSource)
-                .fixedSize()
-                .help(L("切换状态栏显示的来源", "Switch the provider shown in the menu bar", ja: "メニューバーに表示するプロバイダーを切り替え", ko: "메뉴 막대에 표시할 제공자 전환"))
+            Text("Quotlet").font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.text)
+            Text(L("本机全部 AI", "All local AI", ja: "ローカル AI 全体", ko: "모든 로컬 AI"))
+                .font(.system(size: 10.5)).foregroundStyle(Theme.text2)
             Spacer(minLength: 4)
             AccountButton(cloud: cloud)
         }
@@ -241,7 +252,7 @@ struct UsageTab: View {
     var openSettings: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             if store.needsProxyHint, store.usage == nil || store.lastUpdated.map({ now.timeIntervalSince($0) > 600 }) == true {
                 // 网络不通 / 被地区拒绝：提示去设置代理，带一个直达按钮
                 Banner(text: L("连不上 Anthropic。如果你需要代理才能访问，请在设置里开启网络代理。",
@@ -265,17 +276,10 @@ struct UsageTab: View {
             let claudeUsage = store.displayedClaudeUsage(now: Date())
             let claude = claudeUsage?.limits ?? []
             let codex = store.codexLimits(now: now)
-            let all = claude + codex
-            if let advice = Advice.make(claude: claude, codex: codex, now: now) {
+            let gemini = store.geminiLimits(now: now)
+            if let advice = Advice.make(claude: claude, codex: codex, gemini: gemini, now: now) {
                 AdviceCard(advice: advice)
             }
-            // 左边短标签、右边倒计时都按最长的那个定宽，Claude 和 Codex 两组的进度条一样长、左端对齐
-            let labelWidth = all.map {
-                ceil(($0.shortLabel as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium)]).width)
-            }.max() ?? 40
-            let countdownWidth = all.map {
-                ceil(($0.countdown(now: now) as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .regular)]).width) + 1
-            }.max() ?? 40
 
             if !store.usageAPIEnabled {
                 HStack(spacing: 8) {
@@ -284,24 +288,33 @@ struct UsageTab: View {
                     Spacer()
                     ChipButton(title: L("设置", "Settings", ja: "設定", ko: "설정"), action: openSettings)
                 }
-                .help(L("只读本机日志，不读取 Claude 登录凭证。可在设置中开启 Claude 额度接口。", "Reads local logs without accessing your Claude login. Enable the Claude quota API in Settings if needed.", ja: "Claude のログイン情報を読まずにローカルログを集計します。使用枠 API は設定で有効にできます。", ko: "Claude 로그인 정보에 접근하지 않고 로컬 로그만 읽습니다. 한도 API는 설정에서 켤 수 있습니다."))
+                .help(L("只读本机日志，不读取 Claude 登录凭证。可在设置中开启 Claude 额度接口。", "Reads local logs without accessing your Claude login. Enable the Claude quota API in Settings if needed.", ja: "Claude のログイン情報を読まずにローカルログを集计します。使用枠 API は設定で有効にできます。", ko: "Claude 로그인 정보에 접근하지 않고 로컬 로그만 읽습니다. 한도 API는 설정에서 켤 수 있습니다."))
             } else if let u = claudeUsage {
                 ProviderGroup(name: "Claude", plan: u.plan.map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() },
-                              source: .claude, limits: u.limits, now: now,
-                              labelWidth: labelWidth, countdownWidth: countdownWidth)
+                              source: .claude, limits: u.limits, now: now)
             } else if store.isLoading {
                 LoadingState(text: L("正在获取用量…", "Loading usage…", ja: "使用量を取得中…", ko: "사용량을 불러오는 중…"))
             }
 
             if !codex.isEmpty, let c = store.local?.codexLimits {
                 if !claude.isEmpty { Hairline() }
-                ProviderGroup(name: "Codex", plan: c.planTitle, source: .codex, limits: codex, now: now,
-                              labelWidth: labelWidth, countdownWidth: countdownWidth)
+                ProviderGroup(name: "Codex", plan: c.planTitle, source: .codex, limits: codex, now: now)
             } else if store.menuBarSource == .codex {
                 Text(L("还没有 Codex 额度记录。使用一次 Codex 后会自动更新。",
                        "No Codex quota recorded yet. It updates after you use Codex.",
                        ja: "Codex の使用枠は未記録です。使用すると自動更新されます。",
                        ko: "아직 Codex 한도 기록이 없습니다. Codex를 사용하면 자동으로 업데이트됩니다."))
+                    .font(Theme.caption).foregroundStyle(Theme.text2)
+            }
+
+            if !gemini.isEmpty, let g = store.local?.geminiLimits {
+                if !claude.isEmpty || !codex.isEmpty { Hairline() }
+                ProviderGroup(name: "Gemini", plan: g.planTitle, source: .gemini, limits: gemini, now: now)
+            } else if store.menuBarSource == .gemini {
+                Text(L("还没有 Gemini 额度记录。打开 Antigravity 后会自动更新。",
+                       "No Gemini quota recorded yet. It updates when Antigravity is open.",
+                       ja: "Gemini の使用枠は未記録です。Antigravity を開くと自動更新されます。",
+                       ko: "아직 Gemini 한도 기록이 없습니다. Antigravity를 열면 자동으로 업데이트됩니다."))
                     .font(Theme.caption).foregroundStyle(Theme.text2)
             }
 
@@ -314,30 +327,29 @@ struct UsageTab: View {
     }
 }
 
-/// 一个工具的配额：标题行（名字 · 套餐）+ 每条额度一行
+/// 来源标题与额度分层；长范围名不再占用进度条的水平空间。
 struct ProviderGroup: View {
     let name: String
     let plan: String?
     let source: Source
     let limits: [LimitItem]
     let now: Date
-    let labelWidth: CGFloat
-    let countdownWidth: CGFloat
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) {
-                brandIcon.frame(width: 19, height: 19).accessibilityHidden(true)
+                brandIcon.frame(width: 16, height: 16).accessibilityHidden(true)
                 Text(name).font(.system(size: 13, weight: .semibold))
                 if let plan {
-                    Text(plan).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.text2)
-                        .padding(.horizontal, 6).padding(.vertical, 1)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(Theme.hover))
+                    Text(plan).font(.system(size: 11)).foregroundStyle(Theme.text2)
                 }
+                Spacer(minLength: 8)
+                Text(L("已用", "Used", ja: "使用済み", ko: "사용량"))
+                    .font(.system(size: 10.5)).foregroundStyle(Theme.text2)
             }
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 ForEach(limits) { item in
-                    LimitRow(item: item, now: now, labelWidth: labelWidth, countdownWidth: countdownWidth)
+                    LimitRow(item: item, now: now)
                 }
             }
         }
@@ -349,17 +361,25 @@ struct ProviderGroup: View {
         if let url, let image = NSImage(contentsOf: url) {
             Image(nsImage: image).resizable().scaledToFit()
         } else {
-            Image(systemName: source == .claude ? "sun.max.fill" : "terminal.fill")
-                .foregroundStyle(source == .claude ? Theme.data : Theme.codex)
+            Image(systemName: source == .claude ? "sun.max.fill" : source == .gemini ? "sparkles" : "terminal.fill")
+                .foregroundStyle(source == .claude ? Theme.data : source == .gemini ? Theme.gemini : Theme.codex)
         }
     }
 }
 
-/// 面板底部的「今天」：Claude Code + Codex 今天的输出、输入、请求、速度、峰值和 API 等值费用
+/// 面板底部的「今天」：Claude Code + Codex + Gemini 今天的输出、输入、请求、速度、峰值和 API 等值费用
 struct TodayBlock: View {
     let local: LocalSnapshot
     let now: Date
     @EnvironmentObject var store: Store
+
+    private var sourcesText: String {
+        var s: [String] = []
+        if local.hasClaude { s.append("Claude Code") }
+        if local.hasCodex { s.append("Codex") }
+        if local.hasGemini { s.append("Gemini") }
+        return s.isEmpty ? "Claude Code" : s.joined(separator: " + ")
+    }
 
     var body: some View {
         let start = Fmt.calendar.startOfDay(for: now)
@@ -368,9 +388,11 @@ struct TodayBlock: View {
             HStack(spacing: 7) {
                 Text(L("今天", "Today", ja: "今日", ko: "오늘"))
                     .font(.system(size: 13, weight: .semibold))
-                Text(local.hasCodex ? "Claude Code + Codex" : "Claude Code")
+                Text(L("全部来源", "All providers", ja: "すべての提供元", ko: "모든 제공자"))
                     .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.text2)
                     .lineLimit(1)
+                    .help(sourcesText)
                 Spacer(minLength: 4)
                 Button {
                     HistoryWindowController.shared.show(store: store)
@@ -384,21 +406,30 @@ struct TodayBlock: View {
                 .fixedSize()
                 .help(L("打开用量历史窗口", "Open usage history", ja: "使用量の履歴を開く", ko: "사용량 기록 열기"))
             }
-            VStack(spacing: 2) {
-                TodayMetricRow(label: L("输出", "Output", ja: "出力", ko: "출력"), value: Fmt.tokens(st.tokens.output))
-                TodayMetricRow(label: L("输入", "Input", ja: "入力", ko: "입력"), value: Fmt.tokens(st.inputAll),
-                               detail: L("含缓存", "incl. cache", ja: "キャッシュ含む", ko: "캐시 포함"))
-                Hairline().padding(.vertical, 5)
-                TodayMetricRow(label: L("请求", "Requests", ja: "リクエスト", ko: "요청"), value: Fmt.count(st.requests))
-                TodayMetricRow(label: L("平均速度", "Avg speed", ja: "平均速度", ko: "평균 속도"),
-                               value: st.avgSpeed.map { Fmt.speed($0) } ?? "—", unit: st.avgSpeed == nil ? nil : "tok/s")
-                if st.peakSpeed > 0, let at = st.peakAt {
-                    TodayMetricRow(label: L("峰值速度", "Peak speed", ja: "最高速度", ko: "최고 속도"),
-                                   value: Fmt.speed(st.peakSpeed), unit: "tok/s", detail: Fmt.time(at))
+            VStack(spacing: 7) {
+                HStack(spacing: 12) {
+                    TodayMetric(label: L("输出", "Output", ja: "出力", ko: "출력"), value: Fmt.tokens(st.tokens.output))
+                    TodayMetric(label: L("输入 · 含缓存", "Input · incl. cache", ja: "入力 · キャッシュ込", ko: "입력 · 캐시 포함"), value: Fmt.tokens(st.inputAll))
+                    TodayMetric(label: L("请求", "Requests", ja: "リクエスト", ko: "요청"), value: Fmt.count(st.requests))
                 }
-                TodayMetricRow(label: L("费用", "Cost", ja: "費用", ko: "비용"),
-                               value: (st.unpricedRequests > 0 ? "≥" : "") + Fmt.money(st.cost),
-                               detail: L("API 等值", "API equiv.", ja: "API 換算", ko: "API 환산"), help: costHelp(st))
+                Hairline()
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    speedSummary(label: L("平均", "Avg", ja: "平均", ko: "평균"), value: st.avgSpeed.map { Fmt.speed($0) } ?? "—")
+                    Spacer(minLength: 4)
+                    if st.peakSpeed > 0, let at = st.peakAt {
+                        speedSummary(label: L("峰值", "Peak", ja: "最高", ko: "최고"), value: Fmt.speed(st.peakSpeed))
+                            .help(L("峰值时刻 \(Fmt.time(at))", "Peak at \(Fmt.time(at))", ja: "最高速度の時刻 \(Fmt.time(at))", ko: "최고 속도 시각 \(Fmt.time(at))"))
+                    }
+                    Spacer(minLength: 4)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(L("API 等值", "API equiv.", ja: "API 換算", ko: "API 환산"))
+                        Text((st.unpricedRequests > 0 ? "≥" : "") + Fmt.money(st.cost)).monospacedDigit()
+                    }
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.text2)
+                    .lineLimit(1)
+                    .help(costHelp(st))
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
@@ -406,6 +437,17 @@ struct TodayBlock: View {
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.hairline, lineWidth: 1))
         }
         .foregroundStyle(Theme.text)
+    }
+
+    private func speedSummary(label: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(label)
+            Text(value).monospacedDigit()
+            if value != "—" { Text("tok/s") }
+        }
+        .font(.system(size: 10.5))
+        .foregroundStyle(Theme.text2)
+        .lineLimit(1)
     }
 
     private func costHelp(_ st: UsageStats) -> String {
@@ -423,48 +465,42 @@ struct TodayBlock: View {
     }
 }
 
-/// 今日汇总统一为左侧标签、右侧数值；说明和时间跟随标签，不打断数值对齐。
-private struct TodayMetricRow: View {
+/// 今日只把输出、输入和请求作为主指标，速度与费用降为辅助信息。
+private struct TodayMetric: View {
     let label: String
     let value: String
-    var unit: String? = nil
-    var detail: String? = nil
-    var help: String? = nil
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(label).font(Theme.caption)
-            if let detail {
-                Text(detail).font(.system(size: 10.5))
-            }
-            if let help {
-                Image(systemName: "info.circle").font(.system(size: 10))
-                    .help(help)
-            }
-            Spacer(minLength: 8)
-            HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value).font(.system(size: 12.5, weight: .medium).monospacedDigit())
-                if let unit { Text(unit).font(.system(size: 10.5)) }
-            }
-            .fixedSize()
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 10)).foregroundStyle(Theme.text2)
+                .lineLimit(1).minimumScaleFactor(0.85)
+            Text(value).font(.system(size: 16, weight: .semibold).monospacedDigit())
+                .lineLimit(1).minimumScaleFactor(0.85)
         }
-        .lineLimit(1)
-        .frame(maxWidth: .infinity, minHeight: 20, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 extension LimitItem {
-    /// 窗口长度：5 小时 / 7 天；其他类型不知道就不画时间刻度、不做预测
+    /// 窗口长度：5 小时 / 1 天 / 7 天；其他类型不知道就不画时间刻度、不做预测
     var windowLength: TimeInterval? {
-        if kind == "session" { return 5 * 3600 }
+        if kind.hasPrefix("session") { return 5 * 3600 }
+        if kind.hasPrefix("daily") { return 86400 }
         if kind.hasPrefix("weekly") { return 7 * 86400 }
         return nil
     }
 
-    /// 紧凑行左边的短标签：「5 小时」「本周」「Opus 周」
+    /// 紧凑行左边的短标签：「5 小时」「本周」「Opus 周」「Claude / GPT 5 小时」
     static func shortLabel(kind: String, scope: String?) -> String {
         switch kind {
         case "session": return L("5 小时", "5h", ja: "5 時間", ko: "5시간")
+        case "session_scoped":
+            let s = scope ?? L("指定", "Scoped", ja: "対象", ko: "지정")
+            return L("\(s) · 5 小时", "\(s) · 5h", ja: "\(s) · 5 時間", ko: "\(s) · 5시간")
+        case "daily_all": return L("今日", "Daily", ja: "本日", ko: "일간")
+        case "daily_scoped":
+            let s = scope ?? L("指定", "Scoped", ja: "対象", ko: "지정")
+            return L("\(s) · 今日", "\(s) · daily", ja: "\(s) · 本日", ko: "\(s) · 일간")
         case "weekly_all": return L("本周", "Week", ja: "今週", ko: "이번 주")
         case "weekly_scoped":
             let s = scope ?? L("指定", "Scoped", ja: "対象", ko: "지정")
@@ -474,20 +510,13 @@ extension LimitItem {
     }
 
     var shortLabel: String { Self.shortLabel(kind: kind, scope: scope) }
-
-    /// 紧凑行右边的倒计时：「3小时6分」「3天19小时」
-    func countdown(now: Date) -> String {
-        guard let r = resetsAt else { return "" }
-        return r > now ? Fmt.duration(r.timeIntervalSince(now)) : "—"
-    }
 }
 
-/// 额度只显示百分比、倒计时和重置时刻。
+/// 标签和重置时间共用说明行，下一行把空间留给长进度条和额度数值。
 struct LimitRow: View {
     let item: LimitItem
     let now: Date
-    var labelWidth: CGFloat = 40
-    var countdownWidth: CGFloat = 56
+    @State private var hovering = false
 
     private var level: Level { Level(percent: item.percent, severity: item.severity) }
 
@@ -497,42 +526,77 @@ struct LimitRow: View {
         return min(1, max(0, 1 - r.timeIntervalSince(now) / w))
     }
 
+    private var rowHelp: String {
+        item.detail.map { "\(item.title)\n\($0)" } ?? item.title
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                HStack(spacing: 4) {
+                    Text(item.shortLabel)
+                        .font(Theme.bodyMedium)
+                        .lineLimit(1)
+                    if item.detail != nil {
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(hovering ? Theme.text : Theme.text2.opacity(0.65))
+                    }
+                }
+                .layoutPriority(1)
+                .help(rowHelp)
+                Spacer(minLength: 4)
+                if let r = item.resetsAt {
+                    resetLine(r)
+                        .foregroundStyle(Theme.text2)
+                        .font(.system(size: 10.5))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(resetLine(r))
+                }
+            }
             HStack(spacing: 10) {
-                Text(item.shortLabel)
-                    .font(Theme.bodyMedium)
-                    .lineLimit(1)
-                    .frame(width: labelWidth, alignment: .leading)
-                    .help(item.title)
                 // 竖线 = 时间已过多少
-                UsageBar(fraction: item.percent / 100, marker: elapsed, color: level.color, height: 6)
-                    .help(elapsedText ?? "")
+                UsageBar(fraction: item.percent / 100, marker: elapsed, color: level.color, height: 7)
+                    .help([item.detail, elapsedText].compactMap { $0 }.joined(separator: "\n"))
                 Text(item.percentText)
-                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(level.color)
-                    .frame(width: 64, alignment: .trailing)
+                    .font(.system(size: 16, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(level == .normal ? Theme.text : level.color)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(width: 56, alignment: .trailing)
                     .help(item.isEstimated
                           ? L("根据本机新增 token 估算，下次接口刷新时校正。",
                               "Estimated from new local tokens. Corrected at the next quota refresh.",
                               ja: "ローカルの新規トークンから推定。次の API 更新時に補正します。",
                               ko: "새 로컬 토큰으로 추정합니다. 다음 한도 새로 고침 시 보정됩니다.")
-                          : item.title)
-                Text(item.countdown(now: now))
-                    .font(Theme.caption.monospacedDigit())
-                    .foregroundStyle(Theme.text2)
-                    .lineLimit(1).fixedSize()
-                    .frame(width: countdownWidth, alignment: .trailing)
-            }
-
-            if let r = item.resetsAt {
-                resetLine(r)
-                    .foregroundStyle(Theme.text2)
-                    .font(Theme.caption)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, labelWidth + 10)
+                          : rowHelp)
             }
         }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(RoundedRectangle(cornerRadius: 6).fill(hovering && item.detail != nil ? Theme.hover : .clear))
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .overlay(alignment: .topLeading) {
+            if hovering, let detail = item.detail {
+                Text(detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.text)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: 320, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(Theme.group))
+                    .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.divider, lineWidth: 0.75))
+                    .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+                    .alignmentGuide(.top) { $0[.bottom] + 4 }
+                    .allowsHitTesting(false)
+            }
+        }
+        .padding(.horizontal, -6)
+        .padding(.vertical, -3)
+        .zIndex(hovering ? 10 : 0)
     }
 
     private func resetLine(_ r: Date) -> Text {
@@ -639,7 +703,7 @@ struct SettingsView: View {
             SettingsRow {
                 SettingsLabel(L("状态栏来源", "Menu bar source", ja: "メニューバーのソース", ko: "메뉴 막대 소스"), icon: "menubar.rectangle")
                 Spacer()
-                ChipPicker(options: [(Source.claude, "Claude"), (.codex, "Codex")], selection: $store.menuBarSource)
+                ChipPicker(options: [(Source.claude, "Claude"), (.codex, "Codex"), (.gemini, "Gemini")], selection: $store.menuBarSource)
             }
             RowGap()
             SettingsRow {

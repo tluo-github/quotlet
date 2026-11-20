@@ -43,7 +43,11 @@ enum Theme {
     // 已用 dataviz 校验脚本检查：对比度浅色 / 深色都 >= 3:1。
     static let data = Color.dynamic(light: 0xC8643F, dark: 0xDD7A58)
     /// Codex 的标识色（和 Claude 的珊瑚橙区分：橙 / 蓝明度也不同，色弱也分得开）
+    /// 全局吞吐用独立青色，不借用某个提供方的标识色。
+    static let throughput = Color.dynamic(light: 0x147D92, dark: 0x68C7D4)
     static let codex = Color.dynamic(light: 0x3D6FD9, dark: 0x7FA6F5)
+    /// Gemini 的标识色（Google/Gemini 蓝紫色系，和珊瑚橙、Codex 蓝区分）
+    static let gemini = Color.dynamic(light: 0x6E45E2, dark: 0x9D7BFA)
     static let dataStrong = Color.dynamic(light: 0x9A4426, dark: 0xF4A588)  // 选中 / 悬停的那根柱子
 
     // 状态色。警告用琥珀而不是橙，和数据色区分；状态永远配文字。

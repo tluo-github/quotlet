@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Quotlet — Claude and Codex quotas in your menu bar</title>
-<meta name="description" content="See Claude and Codex quotas, resets, and usage history right from your macOS menu bar. Free and open source.">
+<title>Quotlet — Claude, Codex and Gemini quotas in your menu bar</title>
+<meta name="description" content="See Claude, Codex and Gemini quotas, live output throughput (tok/s), reset times and usage history right from your macOS menu bar. Free and open source.">
 <meta name="theme-color" content="#f5f7f9">
-<meta property="og:title" content="Quotlet — Claude and Codex quotas in your menu bar">
-<meta property="og:description" content="The 5-hour and weekly quotas, local token estimates, reset times and alerts. Free and open source.">
+<meta property="og:title" content="Quotlet — Claude, Codex and Gemini quotas in your menu bar">
+<meta property="og:description" content="Claude, Codex and Gemini quotas, live tok/s throughput, switch suggestions, reset times and alerts. Free and open source.">
 <meta property="og:image" content="/assets/panel-en.webp">
 <link rel="icon" href="/assets/icon.png">
 <link rel="apple-touch-icon" href="/assets/icon.png">
@@ -55,39 +55,30 @@
     <div>
       <p class="label" data-i18n="hero.label">macOS menu bar · free &amp; open source</p>
       <h1 data-i18n-html="hero.title">How much quota is left? <em>See it at a glance.</em></h1>
-      <p class="lead" data-i18n="hero.lead">Track Claude and Codex quotas, reset times and local tokens from your Mac menu bar. Get a suggestion to switch when one provider is running low.</p>
+      <p class="lead" data-i18n="hero.lead">Track Claude, Codex and Gemini quotas, live tok/s throughput and reset times from your Mac menu bar. Get a suggestion to switch when one provider is running low.</p>
       <div class="actions">
         <a class="button primary" data-download href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="cta.dmg">Download .dmg</a>
         <a class="button" href="#install">Homebrew</a>
-        <a class="ai-link" href="#install-ai" data-i18n="install.ai.t">Ask your AI to install it</a>
+        <button class="ai-link" type="button" data-copy-key="install.ai.prompt" data-i18n="install.ai.t" aria-live="polite">Ask your AI to install it</button>
       </div>
       <p class="meta"><span data-i18n="hero.meta">macOS 14+ · Apple silicon &amp; Intel · signed &amp; notarized</span> · v{{VERSION}}</p>
     </div>
     <figure class="preview">
-      <div class="preview-bar"><span>Quotlet</span><span>5h 42% · 92%</span></div>
-      <div class="preview-body">
-        <p class="preview-advice" data-i18n="preview.advice">Use Codex for now · 88% left in the 5-hour window</p>
-        <div class="preview-provider"><img src="/assets/claude.png" alt="" width="24" height="24"><strong>Claude</strong><span>Pro</span><b class="is-critical">92%</b></div>
-        <div class="preview-quota"><span data-i18n="preview.hours">5 hours</span><span class="preview-track"><i style="--used:42%"></i></span><b>42%</b></div>
-        <div class="preview-quota critical"><span data-i18n="preview.week">Week</span><span class="preview-track"><i style="--used:92%"></i></span><b>92%</b></div>
-        <div class="preview-provider"><img src="/assets/codex.png" alt="" width="24" height="24"><strong>Codex</strong><span>Plus</span><b>12%</b></div>
-        <div class="preview-quota"><span data-i18n="preview.hours">5 hours</span><span class="preview-track"><i style="--used:12%"></i></span><b>12%</b></div>
-        <div class="preview-quota"><span data-i18n="preview.week">Week</span><span class="preview-track"><i style="--used:2%"></i></span><b>2%</b></div>
-      </div>
-      <figcaption data-i18n="preview.sample">Menu bar preview · Example data</figcaption>
+      <img data-shot="panel" src="/assets/panel-en-light.webp" width="720" height="1720" fetchpriority="high" alt="Quotlet usage panel">
+      <figcaption data-i18n="preview.sample">The Mac app, as it looks today</figcaption>
     </figure>
   </section>
 
   <div class="highlights">
-    <a href="#how"><strong data-i18n="f3.t">Updates between refreshes</strong><span data-i18n="highlight.pace">Claude estimates follow new local tokens between API refreshes.</span></a>
-    <a href="#history"><strong data-i18n="highlight.project">Usage by project</strong><span data-i18n="highlight.trend">Compare Claude Code and Codex tokens by project, session and date.</span></a>
-    <a href="#trust"><strong data-i18n="highlight.local">Local by default</strong><span data-i18n="highlight.sync">Cloud sync is optional. Nothing is reported until you sign in and enable it.</span></a>
+    <a href="#how"><strong data-i18n="highlight.speed">Live throughput &amp; local updates</strong><span data-i18n="highlight.pace">Combined tok/s chart across all local AI, plus local Claude quota estimates between API refreshes.</span></a>
+    <a href="#history"><strong data-i18n="highlight.project">Usage by project</strong><span data-i18n="highlight.trend">Compare Claude Code, Codex and Gemini tokens by project, session, model and date.</span></a>
+    <a href="#trust"><strong data-i18n="highlight.local">Local by default</strong><span data-i18n="highlight.sync">Codex and Gemini read only from your Mac. Claude quota API and Cloud sync stay off until you enable them.</span></a>
   </div>
 
   <section id="how" class="block">
     <p class="label" data-i18n="how.label">How it works</p>
     <h2 data-i18n="how.title">Local updates between quota refreshes.</h2>
-    <p class="lead" data-i18n="how.lead">Quotlet watches Claude Code and Codex session files. Enable Claude quota lookup for server readings every 10 minutes, with calibrated local estimates in between.</p>
+    <p class="lead" data-i18n="how.lead">Quotlet watches Claude Code, Codex and Antigravity (Gemini) logs on your Mac. Codex quotas come from local logs, Gemini quotas from Antigravity's local service, and optional Claude API readings refresh every 10 minutes with local estimates in between.</p>
     <div class="split">
       <pre class="term" aria-label="Example quota estimate"><span class="dim">5h  </span> <span class="ok">██████████</span><span class="tick">│</span><span class="ok">█</span><span class="track">░░░░░░░</span>  <b>≈56.4%</b>   <span class="dim">3h 6m</span>
       <span class="dim">Resets</span> <span class="time">today 10:30</span>
@@ -98,28 +89,28 @@
 
 <span class="dim">Claude API refresh · every 10 minutes by default</span></pre>
       <ul class="points">
-        <li><b data-i18n="how.p1.t">Session files update the numbers.</b> <span data-i18n="how.p1.d">New usage records trigger an update in about a second. Codex quotas also come from its local logs.</span></li>
-        <li><b data-i18n="how.p2.t">Estimates use observed changes.</b> <span data-i18n="how.p2.d">After at least two valid readings in the same window, new Claude tokens can estimate quota usage. The ≈ mark identifies estimates, and each API response corrects them. Models, caching and other devices affect accuracy.</span></li>
-        <li><b data-i18n="how.p3.t">Alerts cover both providers.</b> <span data-i18n="how.p3.d">Alerts default to on at 90%, at 100% and after reset. Claude estimates can trigger them too. Allow macOS notifications when prompted.</span></li>
+        <li><b data-i18n="how.p1.t">Local logs &amp; services update fast.</b> <span data-i18n="how.p1.d">New session records update tokens, speed and quotas in about a second. Codex reads local logs; Gemini queries Antigravity's local service on 127.0.0.1 and caches the last reading.</span></li>
+        <li><b data-i18n="how.p2.t">Claude estimates fill the gaps.</b> <span data-i18n="how.p2.d">After at least two valid readings in the same window, new local Claude tokens estimate quota usage with a ≈ mark, corrected on the next API refresh. Models, caching and other devices affect accuracy.</span></li>
+        <li><b data-i18n="how.p3.t">Alerts cover all three providers.</b> <span data-i18n="how.p3.d">Alerts default to on at 90%, at 100% and after reset across Claude, Codex and Gemini — including Claude estimates. Allow macOS notifications when prompted.</span></li>
       </ul>
     </div>
   </section>
 
   <section id="features" class="block">
     <p class="label" data-i18n="features.label">What it does</p>
-    <h2 data-i18n="features.title">Quotas, sessions and statistics in one panel.</h2>
+    <h2 data-i18n="features.title">Throughput, quotas, sessions and stats in one panel.</h2>
     <div class="cards">
-      <article><p class="card-label" data-i18n="f1.k">Menu bar</p><h3 data-i18n="f1.t">Always in sight</h3><p data-i18n="f1.d">"5h 41% · Wk 62%" right in the menu bar, or just "41% 62%" if you like it compact.</p></article>
-      <article><p class="card-label" data-i18n="f2.k">Limits</p><h3 data-i18n="f2.t">Claude and Codex, side by side</h3><p data-i18n="f2.d">Enable Claude quota lookup for 5-hour, weekly and model-specific limits. Codex quotas come from local logs. A switch suggestion appears when one provider is near its limit and the other has room.</p></article>
-      <article><p class="card-label" data-i18n="f3.k">Estimates</p><h3 data-i18n="f3.t">Updates between refreshes</h3><p data-i18n="f3.d">After calibration, new local tokens update Claude quota estimates in the panel and menu bar. The ≈ mark stays until the next API reading corrects the value.</p></article>
-      <article><p class="card-label" data-i18n="f4.k">Today</p><h3 data-i18n="f4.t">Speed and cost</h3><p data-i18n="f4.d">Today's output and input tokens, requests, average and peak tok/s, and what it would cost at API prices.</p></article>
-      <article id="history"><p class="card-label" data-i18n="f5.k">History</p><h3 data-i18n="f5.t">A usage history window</h3><p data-i18n="f5.d">Use Sessions and Stats in the panel for recent activity. Open History for project trends, models, daily totals and CSV export. Daily totals stay on your Mac after old logs are cleared.</p></article>
-      <article><p class="card-label" data-i18n="f6.k">Alerts</p><h3 data-i18n="f6.t">Notifications, four languages</h3><p data-i18n="f6.d">90%, 100% and reset alerts default to on for Claude and Codex, including Claude estimates. Choose 80%, 90% or 95% for the early alert. Requires macOS notification permission.</p></article>
+      <article><p class="card-label" data-i18n="f1.k">Menu bar</p><h3 data-i18n="f1.t">Always in sight</h3><p data-i18n="f1.d">Pick Claude, Codex or Gemini for the menu bar: "5h 41% · Wk 62%" or compact "41% 62%". Switch sources right from the panel.</p></article>
+      <article><p class="card-label" data-i18n="f2.k">Limits</p><h3 data-i18n="f2.t">Claude, Codex and Gemini, side by side</h3><p data-i18n="f2.d">View 5-hour, weekly and model-specific limits for all three providers in one place. When one nears its limit, a banner suggests switching to another with headroom.</p></article>
+      <article><p class="card-label" data-i18n="f3.k">Throughput</p><h3 data-i18n="f3.t">Live tok/s across all local AI</h3><p data-i18n="f3.d">A real-time speed gauge and 1m / 2m / 5m chart combine concurrent output from Claude, Codex and Gemini, alongside today's tokens and API-equivalent cost.</p></article>
+      <article><p class="card-label" data-i18n="f4.k">Estimates</p><h3 data-i18n="f4.t">Updates between refreshes</h3><p data-i18n="f4.d">After calibration, new local tokens update Claude quota estimates in the panel and menu bar. The ≈ mark stays until the next API reading corrects the value.</p></article>
+      <article id="history"><p class="card-label" data-i18n="f5.k">History</p><h3 data-i18n="f5.t">A usage history window</h3><p data-i18n="f5.d">Use Sessions and Stats in the panel for recent activity. Open History for stacked Claude, Codex and Gemini charts, project trends, models, daily totals and CSV export. Daily totals stay on your Mac after old logs are cleared.</p></article>
+      <article><p class="card-label" data-i18n="f6.k">Alerts</p><h3 data-i18n="f6.t">Notifications, four languages</h3><p data-i18n="f6.d">90%, 100% and reset alerts default to on for Claude, Codex and Gemini, including Claude estimates. Choose 80%, 90% or 95% for the early alert. Requires macOS notification permission.</p></article>
     </div>
     <div class="strip">
-      <figure class="wide"><img data-shot="history" src="/assets/history-en.webp" width="1440" height="1054" loading="lazy" alt=""><figcaption data-i18n="shots.history">Usage history</figcaption></figure>
-      <figure><img data-shot="usage" src="/assets/usage-en.webp" width="720" height="1320" loading="lazy" alt=""><figcaption data-i18n="shots.usage">Panel</figcaption></figure>
-      <figure><img data-shot="settings" src="/assets/settings-en.webp" width="720" height="1320" loading="lazy" alt=""><figcaption data-i18n="shots.settings">Settings</figcaption></figure>
+      <figure class="wide"><img data-shot="history" src="/assets/history-en-light.webp" width="1440" height="1121" loading="lazy" alt=""><figcaption data-i18n="shots.history">Usage history</figcaption></figure>
+      <figure><img data-shot="usage" src="/assets/usage-en-light.webp" width="720" height="1629" loading="lazy" alt=""><figcaption data-i18n="shots.usage">Panel</figcaption></figure>
+      <figure><img data-shot="settings" src="/assets/settings-en-light.webp" width="720" height="1629" loading="lazy" alt=""><figcaption data-i18n="shots.settings">Settings</figcaption></figure>
     </div>
   </section>
 
@@ -128,7 +119,7 @@
     <h2 data-i18n="cloud.title">The menu bar stays small. The details live on the web.</h2>
     <p class="lead" data-i18n="cloud.lead">Sign in and open app.quotlet.com for the full picture: limits from every Mac you use, session history, which sessions are running or waiting for you, and token trends — on your phone too.</p>
     <ul class="points wide">
-      <li><b data-i18n="cloud.p1.t">Optional, off by default.</b> <span data-i18n="cloud.p1.d">Local stats work offline. Enabling Claude quota lookup connects to Anthropic. Browser sign-in enables optional Cloud sync.</span></li>
+      <li><b data-i18n="cloud.p1.t">Optional, off by default.</b> <span data-i18n="cloud.p1.d">Local stats, Codex and Gemini work without external servers. Enabling Claude quota lookup connects to Anthropic. Browser sign-in enables optional Cloud sync.</span></li>
       <li><b data-i18n="cloud.p2.t">Choose what to sync.</b> <span data-i18n="cloud.p2.d">Sync limits, token counts and session status. Session-title uploads have their own switch. Prompts and code stay on your Mac.</span></li>
       <li><b data-i18n="cloud.p3.t">Stop whenever you like.</b> <span data-i18n="cloud.p3.d">Sign out on the Mac, or remove it from the website, and it stops sending anything.</span></li>
     </ul>
@@ -140,8 +131,8 @@
     <p class="lead" data-i18n="trust.lead">Local logs provide token statistics. Claude quota lookup and Cloud sync are optional connections you control in Settings.</p>
     <div class="cards">
       <article><h3 data-i18n="t1.t">Claude quota lookup is optional</h3><p data-i18n="t1.d">Enable it in Settings to read Claude Code credentials through macOS Keychain and request quotas from Anthropic. Use the dedicated authorization button if the system requires access.</p><code class="verify">git grep -n accessToken Sources/</code></article>
-      <article><h3 data-i18n="t2.t">Connections you enable</h3><p data-i18n="t2.d">Local mode reads files on your Mac. Claude quota lookup uses api.anthropic.com. Cloud sign-in and sync use app.quotlet.com.</p><code class="verify">sudo lsof -i -a -c Quotlet</code></article>
-      <article><h3 data-i18n="t3.t">Your logs stay put</h3><p data-i18n="t3.d">Sessions and tokens are read, never written, from the logs Claude Code and Codex already keep on your Mac.</p><code class="verify">ls ~/.claude/projects ~/.codex/sessions</code></article>
+      <article><h3 data-i18n="t2.t">Connections you enable</h3><p data-i18n="t2.d">Local mode reads files on your Mac and queries Antigravity only on 127.0.0.1. Claude quota lookup uses api.anthropic.com. Cloud sign-in and sync use app.quotlet.com.</p><code class="verify">sudo lsof -i -a -c Quotlet</code></article>
+      <article><h3 data-i18n="t3.t">Your logs stay put</h3><p data-i18n="t3.d">Sessions and tokens are read, never written, from the logs Claude Code, Codex and Antigravity already keep on your Mac.</p><code class="verify">ls ~/.claude/projects ~/.codex/sessions ~/.gemini/antigravity/brain</code></article>
       <article><h3 data-i18n="t4.t">Signed and notarized</h3><p data-i18n="t4.d">The official download is Developer ID signed and notarized by Apple.</p><code class="verify">spctl -a -vv /Applications/Quotlet.app</code></article>
       <article><h3 data-i18n="t5.t">Open source</h3><p data-i18n="t5.d">MIT licensed. Every line is on GitHub, and you can build the app yourself in one command.</p><code class="verify">./build.sh install</code></article>
     </div>
@@ -177,14 +168,14 @@ cd quotlet && ./build.sh install</code></pre>
     </div>
     <ul class="req">
       <li data-i18n="install.r1">macOS 14 Sonoma or later, Apple silicon or Intel</li>
-      <li data-i18n="install.r2">Local Claude Code or Codex session logs. Claude quota lookup also needs a Claude subscription login</li>
+      <li data-i18n="install.r2">Local Claude Code, Codex or Antigravity (Gemini) logs. Claude quota lookup also needs a Claude subscription login.</li>
       <li data-i18n="install.r3">Can't see the numbers? macOS may have tucked the icon away. Hold ⌘ and drag it where you want it.</li>
     </ul>
   </section>
 </main>
 
 <footer class="foot">
-  <p data-i18n="foot.disclaimer">Quotlet is an independent open-source project. It is not an Anthropic product and is not affiliated with Anthropic. "Claude" is a trademark of Anthropic.</p>
+  <p data-i18n="foot.disclaimer">Quotlet is an independent open-source project, not affiliated with Anthropic, OpenAI or Google. Claude, Codex and Gemini are trademarks of their respective owners.</p>
   <p data-i18n="foot.renamed">Quotlet was called Quotabar before version 0.5.</p>
   <p class="links"><a href="https://github.com/tluo-github/quotlet">GitHub</a> · <a href="https://github.com/tluo-github/quotlet/issues" data-i18n="foot.issues">Issues</a> · <a href="https://github.com/tluo-github/quotlet/blob/main/LICENSE">MIT License</a></p>
 </footer>
