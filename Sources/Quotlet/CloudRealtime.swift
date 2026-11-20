@@ -60,6 +60,8 @@ final class RemoteCommandManager: ObservableObject {
 
     /// 正在排队 / 执行中的指令去重集合与 FIFO 队列
     private var seenCommandIds: Set<String> = []
+    private var cancelledCommandIds: Set<String> = []
+    private var activeCancelToken: ExecutionCancelToken?
     private var queue: [RemoteCommand] = []
     private var processingQueue = false
     /// 记录当前由 Quotlet 远程执行器运行中的 sessionId，避免误判自己为终端交互冲突
@@ -205,8 +207,11 @@ final class RemoteCommandManager: ObservableObject {
         enabled = false
         UserDefaults.standard.set(false, forKey: Key.enabled)
         disconnectWebSocket()
+        activeCancelToken?.cancel()
+        activeCancelToken = nil
         queue.removeAll()
         seenCommandIds.removeAll()
+        cancelledCommandIds.removeAll()
         lastError = nil
     }
 
@@ -387,6 +392,10 @@ final class RemoteCommandManager: ObservableObject {
             log(.info, "CMD", "通过 WS 收到指令 \(cmd.id.prefix(8)) [\(cmd.provider)/\(cmd.mode)] 项目=\(cmd.project ?? "-")")
             sendAck(commandId: cmd.id)
             enqueue(cmd)
+        case "command_cancel":
+            if let obj = root["data"] as? [String: Any], let id = obj["id"] as? String {
+                cancelCommand(id: id, fromRemote: true)
+            }
         default:
             break
         }
@@ -435,11 +444,45 @@ final class RemoteCommandManager: ObservableObject {
     // MARK: 指令执行流水线
 
     func enqueue(_ command: RemoteCommand) {
+        guard !cancelledCommandIds.contains(command.id) else { return }
         guard seenCommandIds.insert(command.id).inserted else { return }
         queue.append(command)
         if !processingQueue {
             processingQueue = true
             Task { await processQueue() }
+        }
+    }
+
+    func cancelCommand(id: String, fromRemote: Bool = false) {
+        cancelledCommandIds.insert(id)
+        if let idx = queue.firstIndex(where: { $0.id == id }) {
+            let cmd = queue.remove(at: idx)
+            log(.warn, "CMD", "指令 \(id.prefix(8)) 已在排队阶段被终止")
+            let entry = CommandHistoryEntry(
+                id: cmd.id,
+                provider: cmd.provider,
+                mode: cmd.mode,
+                sessionId: cmd.sessionId,
+                project: cmd.project,
+                resolvedCwd: nil,
+                prompt: cmd.prompt,
+                status: "cancelled",
+                result: nil,
+                error: "用户已终止",
+                resultSessionId: nil,
+                receivedAt: Date(),
+                finishedAt: Date()
+            )
+            recordHistory(entry)
+        }
+        if activeCommandId == id {
+            log(.warn, "CMD", "收到终止指令 \(id.prefix(8))，正在结束子进程…")
+            activeCancelToken?.cancel()
+        }
+        if !fromRemote, let token = Cloud.shared.token {
+            Task {
+                _ = try? await Cloud.request("POST", "/api/commands/\(id)/cancel", json: [:], token: token)
+            }
         }
     }
 
@@ -523,6 +566,16 @@ final class RemoteCommandManager: ObservableObject {
                 }
             }
 
+            if cancelledCommandIds.contains(cmd.id) {
+                entry.status = "cancelled"
+                entry.error = "用户已终止"
+                entry.finishedAt = Date()
+                recordHistory(entry)
+                log(.warn, "CMD", "指令 \(cmd.id.prefix(8)) 在启动前已被终止")
+                await reportStatus(cmd.id, status: "cancelled", error: "用户已终止")
+                return
+            }
+
             entry.status = "running"
             recordHistory(entry)
             log(.info, "CMD", "开始执行 \(cmd.id.prefix(8))：\(cliPath) [\(mode.rawValue)] cwd=\(cwd)")
@@ -530,6 +583,10 @@ final class RemoteCommandManager: ObservableObject {
 
             if let sid = cmd.sessionId { ownRunningSessionIds.insert(sid) }
             defer { if let sid = cmd.sessionId { ownRunningSessionIds.remove(sid) } }
+
+            let cancelToken = ExecutionCancelToken()
+            activeCancelToken = cancelToken
+            defer { if activeCancelToken === cancelToken { activeCancelToken = nil } }
 
             let commandId = cmd.id
             let result = await runner.run(
@@ -539,21 +596,26 @@ final class RemoteCommandManager: ObservableObject {
                 sessionId: cmd.sessionId,
                 cwd: cwd,
                 prompt: cmd.prompt,
+                cancelToken: cancelToken,
                 onProgress: { progress in
                     Task { @MainActor in
+                        guard !RemoteCommandManager.shared.cancelledCommandIds.contains(commandId) else { return }
                         await RemoteCommandManager.shared.reportStatus(commandId, status: "running", progress: progress)
                     }
                 }
             )
 
-            entry.status = result.succeeded ? "done" : "failed"
+            let wasCancelled = result.cancelled || cancelledCommandIds.contains(cmd.id)
+            entry.status = wasCancelled ? "cancelled" : (result.succeeded ? "done" : "failed")
             entry.result = result.summary
-            entry.error = result.error
+            entry.error = wasCancelled ? "用户已终止" : result.error
             entry.resultSessionId = result.resultSessionId
             entry.finishedAt = Date()
             recordHistory(entry)
 
-            if result.succeeded {
+            if wasCancelled {
+                log(.warn, "CMD", "指令 \(cmd.id.prefix(8)) 已终止")
+            } else if result.succeeded {
                 log(.ok, "CMD", "指令 \(cmd.id.prefix(8)) 执行完成（session=\(result.resultSessionId ?? "-")）")
             } else {
                 log(.error, "CMD", "指令 \(cmd.id.prefix(8)) 执行失败：\(result.error ?? "未知错误")")
@@ -563,7 +625,7 @@ final class RemoteCommandManager: ObservableObject {
                 cmd.id,
                 status: entry.status,
                 result: result.summary,
-                error: result.error,
+                error: entry.error,
                 resultSessionId: result.resultSessionId
             )
         }

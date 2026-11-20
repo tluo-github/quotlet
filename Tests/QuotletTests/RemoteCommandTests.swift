@@ -239,6 +239,22 @@ final class RemoteCommandTests: XCTestCase {
         )
         XCTAssertFalse(timeoutRes.succeeded)
         XCTAssertTrue(timeoutRes.error?.contains("超时") == true)
+
+        // Active cancellation via ExecutionCancelToken
+        let cancelToken = ExecutionCancelToken()
+        let cancelRunner = SubprocessProviderRunner(timeout: 10, progressMinInterval: 0)
+        Task.detached {
+            try? await Task.sleep(for: .milliseconds(250))
+            cancelToken.cancel()
+        }
+        let started = Date()
+        let cancelRes = await cancelRunner.run(
+            source: .claude, cliPath: slowCLI.path, mode: .new, sessionId: nil,
+            cwd: dir.path, prompt: "cancel me", cancelToken: cancelToken, onProgress: { _ in }
+        )
+        XCTAssertTrue(cancelRes.cancelled)
+        XCTAssertFalse(cancelRes.succeeded)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 3.0)
     }
 
     func testLoopbackURLsBypassHTTPProxy() {

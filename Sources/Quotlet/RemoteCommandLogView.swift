@@ -259,7 +259,7 @@ struct RemoteCommandLogView: View {
             switch item.status {
             case "done": return .green
             case "running", "delivered": return .blue
-            case "rejected": return .orange
+            case "rejected", "cancelled": return .orange
             case "failed": return .red
             default: return .secondary
             }
@@ -288,6 +288,14 @@ struct RemoteCommandLogView: View {
                 }
 
                 Spacer()
+
+                if item.status == "running" || item.status == "delivered" || item.status == "queued" {
+                    Button(L("终止", "Stop", ja: "中止", ko: "중지")) {
+                        remote.cancelCommand(id: item.id)
+                    }
+                    .controlSize(.mini)
+                    .tint(.red)
+                }
 
                 Text(Self.dateTimeFmt.string(from: item.receivedAt))
                     .font(.system(size: 11).monospacedDigit())
@@ -558,7 +566,7 @@ struct RemoteTab: View {
             switch item.status {
             case "done": return .green
             case "running", "delivered": return .blue
-            case "rejected": return .orange
+            case "rejected", "cancelled": return .orange
             case "failed": return .red
             default: return .secondary
             }

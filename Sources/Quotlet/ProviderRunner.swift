@@ -10,6 +10,53 @@ struct ProviderExecutionResult: Equatable {
     let summary: String?
     let error: String?
     let resultSessionId: String?
+    let cancelled: Bool
+
+    init(succeeded: Bool, summary: String?, error: String?, resultSessionId: String?, cancelled: Bool = false) {
+        self.succeeded = succeeded
+        self.summary = summary
+        self.error = error
+        self.resultSessionId = resultSessionId
+        self.cancelled = cancelled
+    }
+}
+
+final class ExecutionCancelToken: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _cancelled = false
+    private var onCancel: (() -> Void)?
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _cancelled
+    }
+
+    func setHandler(_ handler: @escaping () -> Void) {
+        lock.lock()
+        let already = _cancelled
+        onCancel = handler
+        lock.unlock()
+        if already { handler() }
+    }
+
+    func clearHandler() {
+        lock.lock()
+        onCancel = nil
+        lock.unlock()
+    }
+
+    func cancel() {
+        lock.lock()
+        if _cancelled {
+            lock.unlock()
+            return
+        }
+        _cancelled = true
+        let handler = onCancel
+        lock.unlock()
+        handler?()
+    }
 }
 
 struct ProviderCommandInvocation: Equatable {
@@ -365,7 +412,11 @@ final class SubprocessProviderRunner: Sendable {
              sessionId: String?,
              cwd: String,
              prompt: String,
+             cancelToken: ExecutionCancelToken? = nil,
              onProgress: @escaping @Sendable (String) -> Void) async -> ProviderExecutionResult {
+        if cancelToken?.isCancelled == true {
+            return ProviderExecutionResult(succeeded: false, summary: nil, error: "用户已终止", resultSessionId: nil, cancelled: true)
+        }
         let invocation: ProviderCommandInvocation
         do {
             invocation = try ProviderCommandBuilder.build(
@@ -377,7 +428,7 @@ final class SubprocessProviderRunner: Sendable {
 
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let result = self.executeSync(source: source, invocation: invocation, cwd: cwd, onProgress: onProgress)
+                let result = self.executeSync(source: source, invocation: invocation, cwd: cwd, cancelToken: cancelToken, onProgress: onProgress)
                 continuation.resume(returning: result)
             }
         }
@@ -386,7 +437,11 @@ final class SubprocessProviderRunner: Sendable {
     private func executeSync(source: Source,
                              invocation: ProviderCommandInvocation,
                              cwd: String,
+                             cancelToken: ExecutionCancelToken?,
                              onProgress: @escaping @Sendable (String) -> Void) -> ProviderExecutionResult {
+        if cancelToken?.isCancelled == true {
+            return ProviderExecutionResult(succeeded: false, summary: nil, error: "用户已终止", resultSessionId: nil, cancelled: true)
+        }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: invocation.executable)
         proc.arguments = invocation.arguments
@@ -457,7 +512,17 @@ final class SubprocessProviderRunner: Sendable {
 
         let sem = DispatchSemaphore(value: 0)
         proc.terminationHandler = { _ in sem.signal() }
+        cancelToken?.setHandler {
+            if proc.isRunning {
+                proc.terminate()
+                let pid = proc.processIdentifier
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.0) {
+                    if proc.isRunning { kill(pid, SIGKILL) }
+                }
+            }
+        }
         let timedOut = sem.wait(timeout: .now() + timeout) == .timedOut
+        cancelToken?.clearHandler()
         if timedOut {
             proc.terminate()
             _ = sem.wait(timeout: .now() + 2.0)
@@ -480,6 +545,15 @@ final class SubprocessProviderRunner: Sendable {
             }
             if errBuffer.count < 65_536 { errBuffer.append(tailErr) }
             let stderrText = String(decoding: errBuffer, as: UTF8.self)
+            if cancelToken?.isCancelled == true {
+                return ProviderExecutionResult(
+                    succeeded: false,
+                    summary: parser.lastProgress,
+                    error: "用户已终止",
+                    resultSessionId: parser.resultSessionId,
+                    cancelled: true
+                )
+            }
             if timedOut {
                 return ProviderExecutionResult(
                     succeeded: false,
