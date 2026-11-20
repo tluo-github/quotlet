@@ -390,3 +390,283 @@ struct RemoteCommandLogView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedLogs = false }
     }
 }
+
+// MARK: - 主面板「远程指令」标签页（360pt 宽紧凑布局）
+
+struct RemoteTab: View {
+    @ObservedObject private var cloud = Cloud.shared
+    @ObservedObject private var remote = RemoteCommandManager.shared
+    let openSettings: () -> Void
+
+    @State private var expandedIds: Set<String> = []
+    @State private var showLogs = false
+    @State private var copiedDevId = false
+
+    private static let clockFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !cloud.isSignedIn {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(L("登录 Quotlet Cloud 后可接收远程指令", "Sign in to Quotlet Cloud to receive remote commands", ja: "Quotlet Cloud にログインしてリモートコマンドを受信", ko: "원격 명령을 받으려면 Quotlet Cloud에 로그인하세요"))
+                        .font(Theme.bodyMedium)
+                        .foregroundStyle(Theme.text)
+                    Text(L("仅在你在本机手动开启后生效，且只允许在近 30 天使用过的项目目录中执行。",
+                           "Off by default. Only runs in project folders used in the last 30 days.",
+                           ja: "既定でオフ。直近 30 日間のプロジェクトのみ許可されます。",
+                           ko: "기본값은 꺼짐이며 최근 30일간 사용한 프로젝트 폴더에서만 실행됩니다."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.text2)
+                    ChipButton(title: L("登录", "Sign in", ja: "ログイン", ko: "로그인")) { cloud.signIn() }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Theme.group))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.hairline, lineWidth: 1))
+            } else {
+                statusCard
+                historySection
+                liveLogSection
+            }
+        }
+    }
+
+    private var statusCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(remote.wsConnected ? Color.green : Color.orange)
+                        .frame(width: 7, height: 7)
+                    Text(remote.wsConnected
+                         ? L("实时通道已连接", "Live connected", ja: "リアルタイム接続中", ko: "실시간 연결됨")
+                         : L("等待连接…", "Connecting…", ja: "接続待ち…", ko: "연결 중…"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.text)
+                    if !remote.wsRouteLabel.isEmpty {
+                        Text("· \(remote.wsRouteLabel)")
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Theme.text2)
+                    }
+                }
+                Spacer()
+                SwitchToggle(isOn: Binding(get: { remote.enabled }, set: { remote.setEnabled($0) }))
+            }
+
+            if let id = cloud.deviceId {
+                HStack(spacing: 6) {
+                    Text(L("设备 ID", "Device ID", ja: "デバイス ID", ko: "기기 ID"))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.text2)
+                    Text(String(id.suffix(8)))
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(Theme.text)
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(id, forType: .string)
+                        copiedDevId = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copiedDevId = false }
+                    } label: {
+                        Image(systemName: copiedDevId ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(Theme.text2)
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("复制完整 Device ID 与 iPhone 核对", "Copy full Device ID", ja: "完全な Device ID をコピー", ko: "전체 Device ID 복사"))
+                    Spacer()
+                }
+            }
+
+            if let caps = remote.capabilities {
+                HStack(spacing: 6) {
+                    miniCap("Claude", ok: caps.claude.available)
+                    miniCap("Codex", ok: caps.codex.available)
+                    miniCap("Antigravity (agy)", ok: caps.gemini.available)
+                }
+            }
+
+            Hairline()
+
+            HStack(spacing: 8) {
+                ChipButton(title: L("重连拉取", "Sync Queue", ja: "再接続", ko: "재연결")) {
+                    remote.reconnectAndSync()
+                }
+                ChipButton(title: L("完整日志窗口", "Log Window", ja: "ログウィンドウ", ko: "로그 창")) {
+                    RemoteCommandLogWindowController.shared.show()
+                }
+                Spacer()
+                Button(L("设置", "Settings", ja: "設定", ko: "설정")) {
+                    openSettings()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.text2)
+            }
+        }
+        .padding(11)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.group))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.hairline, lineWidth: 1))
+    }
+
+    private func miniCap(_ title: String, ok: Bool) -> some View {
+        Text("\(title) \(ok ? "✓" : "—")")
+            .font(.system(size: 10, weight: .medium))
+            .lineLimit(1)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background((ok ? Color.green : Color.secondary).opacity(0.13), in: Capsule())
+            .foregroundStyle(ok ? Color.green : Theme.text2)
+    }
+
+    private var historySection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(L("指令执行历史", "Command History", ja: "コマンド履歴", ko: "명령 실행 기록"))
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(Theme.text)
+                Spacer()
+                Text("\(remote.recentHistory.count)")
+                    .font(.system(size: 10.5).monospacedDigit())
+                    .foregroundStyle(Theme.text2)
+            }
+
+            if remote.recentHistory.isEmpty {
+                Text(L("本机暂未收到远程指令。在 iPhone 或网页端选中本台 Mac 发送后，这里会实时显示进度与结果。",
+                       "No commands received yet. Send one from iPhone or web to see live progress here.",
+                       ja: "まだコマンドを受信していません。",
+                       ko: "아직 수신한 원격 명령이 없습니다."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.text2)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 9).fill(Theme.group))
+            } else {
+                ForEach(remote.recentHistory.prefix(15)) { item in
+                    compactHistoryCard(item)
+                }
+            }
+        }
+    }
+
+    private func compactHistoryCard(_ item: CommandHistoryEntry) -> some View {
+        let expanded = expandedIds.contains(item.id)
+        let color: Color = {
+            switch item.status {
+            case "done": return .green
+            case "running", "delivered": return .blue
+            case "rejected": return .orange
+            case "failed": return .red
+            default: return .secondary
+            }
+        }()
+
+        return VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text(item.status.uppercased())
+                    .font(.system(size: 9.5, weight: .bold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1.5)
+                    .background(color.opacity(0.15), in: Capsule())
+                    .foregroundStyle(color)
+
+                Text(item.provider == "gemini" ? "Antigravity" : item.provider.capitalized)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(Theme.text)
+
+                if let proj = item.project, !proj.isEmpty {
+                    Text("· \(proj)")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.text2)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text(Self.clockFmt.string(from: item.receivedAt))
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundStyle(Theme.text2)
+            }
+
+            Text(item.prompt)
+                .font(.system(size: 11.5))
+                .foregroundStyle(Theme.text)
+                .lineLimit(expanded ? nil : 2)
+
+            if let res = item.result, !res.isEmpty {
+                Text(res)
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundStyle(Theme.text2)
+                    .lineLimit(expanded ? nil : 3)
+                    .textSelection(.enabled)
+                    .padding(6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Theme.surface))
+            }
+
+            if let err = item.error, !err.isEmpty {
+                Text(err)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.red)
+                    .lineLimit(expanded ? nil : 2)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(9)
+        .background(RoundedRectangle(cornerRadius: 9).fill(Theme.group))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.hairline, lineWidth: 1))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if expanded { expandedIds.remove(item.id) } else { expandedIds.insert(item.id) }
+        }
+    }
+
+    private var liveLogSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                showLogs.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: showLogs ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 9.5, weight: .semibold))
+                    Text(L("运行日志 (\(remote.logs.count))", "Live Logs (\(remote.logs.count))", ja: "実行ログ (\(remote.logs.count))", ko: "실행 로그 (\(remote.logs.count))"))
+                        .font(.system(size: 11, weight: .semibold))
+                    Spacer()
+                }
+                .foregroundStyle(Theme.text2)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if showLogs {
+                VStack(alignment: .leading, spacing: 4) {
+                    if remote.logs.isEmpty {
+                        Text(L("暂无日志", "No logs yet", ja: "ログなし", ko: "로그 없음"))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Theme.text2)
+                    } else {
+                        ForEach(remote.logs.prefix(15)) { entry in
+                            HStack(alignment: .top, spacing: 5) {
+                                Text(Self.clockFmt.string(from: entry.ts))
+                                    .font(.system(size: 9.5, design: .monospaced))
+                                    .foregroundStyle(Theme.text2)
+                                Text("[\(entry.category)]")
+                                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(entry.level == .error ? Color.red : (entry.level == .ok ? Color.green : Theme.text2))
+                                Text(entry.message)
+                                    .font(.system(size: 10, design: .monospaced))
+                                    .foregroundStyle(Theme.text)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                    }
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.group))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.hairline, lineWidth: 1))
+            }
+        }
+    }
+}

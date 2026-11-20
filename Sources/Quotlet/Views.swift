@@ -19,13 +19,14 @@ struct ContentView: View {
     }
 
     enum Tab: String, CaseIterable {
-        case usage, sessions, stats
+        case usage, sessions, stats, remote
 
         var title: String {
             switch self {
             case .usage: return L("额度", "Quotas", ja: "使用枠", ko: "한도")
             case .sessions: return L("会话", "Sessions", ja: "セッション", ko: "세션")
             case .stats: return L("统计", "Stats", ja: "統計", ko: "통계")
+            case .remote: return L("远程指令", "Remote", ja: "リモート", ko: "원격")
             }
         }
     }
@@ -65,6 +66,7 @@ struct ContentView: View {
                             case .usage: UsageTab(now: ctx.date, openSettings: { showSettings = true })
                             case .sessions: SessionsTab(now: ctx.date)
                             case .stats: StatsTab(now: ctx.date)
+                            case .remote: RemoteTab(openSettings: { showSettings = true })
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
