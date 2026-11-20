@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-// 管理 Claude Code（以及已安装的 Gemini CLI）hooks 的安全安装、卸载与路径自愈。
+// 管理 Claude Code（以及可选的 Antigravity CLI）hooks 的安全安装、卸载与路径自愈。
 //
 // 安全与行为约束（docs/cloud-design.md 第 2 节）：
 // - 默认关闭；必须先登录 Quotlet Cloud 才能打开；退出登录时自动卸载
@@ -50,7 +50,7 @@ struct HookInstaller {
         targets.append("Claude Code")
         if installGeminiHooks {
             try installTarget(url: geminiSettingsURL, events: Self.geminiEvents, command: Self.commandString(executablePath: executablePath, source: "gemini"))
-            targets.append("Gemini CLI")
+            targets.append("Antigravity CLI")
         }
         return targets
     }
@@ -314,7 +314,7 @@ final class HookManager: ObservableObject {
                 if !pathMatches {
                     installedTargets = (try? installer.install()) ?? ["Claude Code"]
                 } else {
-                    installedTargets = installer.installGeminiHooks ? ["Claude Code", "Gemini CLI"] : ["Claude Code"]
+                    installedTargets = installer.installGeminiHooks ? ["Claude Code", "Antigravity CLI"] : ["Claude Code"]
                 }
                 startWatcherIfNeeded()
             }

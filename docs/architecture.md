@@ -29,7 +29,7 @@ quotlet/
 │   ├── Advice.swift              # 跨工具额度切换建议卡片（Claude / Codex / Gemini）
 │   ├── Notifier.swift            # macOS 系统通知（快到上限 / 已用完 / 重置已恢复，去重防抖）
 │   ├── Cloud.swift / CloudSync.swift # GitHub OAuth 登录、增量云端上报与 Hook 状态合并
-│   ├── CLICapabilities.swift     # 本机 Claude / Codex / Gemini CLI 能力探测与上报
+│   ├── CLICapabilities.swift     # 本机 Claude / Codex / Antigravity CLI 能力探测与上报
 │   ├── HookEvents.swift / HookInstaller.swift # --hook 极速命令行分支、events.jsonl 监听与 hooks 安全装卸
 │   ├── CommandSecurity.swift / ProviderRunner.swift # 30 天目录白名单、终端冲突保护、统一三来源执行器与指令审计
 │   ├── CloudRealtime.swift       # /api/ws WebSocket 长连接、离线指令对账与远程指令调度器

@@ -1,6 +1,6 @@
 import Foundation
 
-// 统一的三来源远程指令执行器（Claude Code / Codex / Gemini CLI）：
+// 统一的三来源远程指令执行器（Claude Code / Codex / Antigravity CLI）：
 // - 权限沿用用户本机 CLI 自身配置，不注入 --dangerously-skip-permissions / --yolo
 // - 逐行解析各家 JSONL / stream-json 输出，节流回报实时进度并提炼最终回复摘要
 // - 支持超时自动终止，避免僵尸子进程
@@ -301,7 +301,7 @@ final class ProviderStreamParser {
             if let sid = obj["session_id"] as? String, !sid.isEmpty {
                 resultSessionId = sid
             }
-            lastProgress = "Gemini CLI 会话已启动…"
+            lastProgress = "Antigravity CLI 会话已启动…"
             return lastProgress
         case "message":
             let role = (obj["role"] as? String ?? "").lowercased()

@@ -1,6 +1,6 @@
 import Foundation
 
-// 探测本机实际可用的 AI CLI 能力（Claude Code / Codex / Gemini CLI）。
+// 探测本机实际可用的 AI CLI 能力（Claude Code / Codex / Antigravity CLI）。
 // 不猜测参数：实测检查二进制路径、--version 与 --help 支持的标志，上报给 Quotlet Cloud。
 
 struct ProviderCapability: Codable, Equatable {

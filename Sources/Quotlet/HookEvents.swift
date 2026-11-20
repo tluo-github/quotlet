@@ -60,7 +60,7 @@ enum HookStatusMapper {
 
     static func map(_ record: HookEventRecord) -> Mapped? {
         switch record.hookEventName {
-        // Claude Code + Gemini CLI 通用
+        // Claude Code + Antigravity CLI 通用
         case "SessionStart":
             return Mapped(status: "idle", detail: nil, isPromptExcerpt: false, interactiveOpen: true)
         case "UserPromptSubmit", "BeforeAgent":
@@ -68,7 +68,7 @@ enum HookStatusMapper {
         case "Notification":
             let nt = (record.notificationType ?? "").lowercased()
             let msg = record.message
-            // Claude Code 权限弹窗为 permission_prompt；Gemini CLI 通知若包含授权提示也归类为 waiting
+            // Claude Code 权限弹窗为 permission_prompt；其他通知若包含授权提示也归类为 waiting
             if nt == "permission_prompt" || nt.contains("permission") || nt.contains("approval") || nt.contains("confirm")
                 || (record.source == "gemini" && msg != nil) {
                 return Mapped(status: "waiting", detail: msg, isPromptExcerpt: false, interactiveOpen: true)

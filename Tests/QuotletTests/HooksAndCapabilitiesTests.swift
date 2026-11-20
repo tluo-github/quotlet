@@ -157,7 +157,7 @@ final class HooksAndCapabilitiesTests: XCTestCase {
             installGeminiHooks: true
         )
         let targets = try installer1.install()
-        XCTAssertEqual(targets, ["Claude Code", "Gemini CLI"])
+        XCTAssertEqual(targets, ["Claude Code", "Antigravity CLI"])
         XCTAssertEqual(installer1.inspectClaude(), .installed(pathMatches: true))
 
         // Backup file should exist and preserve original without quotlet-hook
