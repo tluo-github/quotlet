@@ -328,6 +328,14 @@ enum Network {
     private static let lock = NSLock()
 
     static func sessions(allowFallback: Bool) -> [URLSession] {
+        sessions(for: nil, allowFallback: allowFallback)
+    }
+
+    static func sessions(for url: URL?, allowFallback: Bool) -> [URLSession] {
+        // 本机回环地址始终直连，避免本地 wrangler dev 被 HTTP 代理拦截
+        if let host = url?.host?.lowercased(), host == "localhost" || host == "127.0.0.1" || host == "::1" {
+            return [session(key: "direct") { .ephemeral }]
+        }
         let d = UserDefaults.standard
         let host = (d.string(forKey: Key.host) ?? "").trimmingCharacters(in: .whitespaces)
         let port = d.integer(forKey: Key.port)

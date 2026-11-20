@@ -208,6 +208,7 @@ final class Cloud: ObservableObject {
         deviceId = nil
         setUser(nil)
         HookManager.shared.handleSignedOut()
+        RemoteCommandManager.shared.handleSignedOut()
     }
 
     private func setUser(_ u: CloudUser?) {
@@ -225,7 +226,8 @@ final class Cloud: ObservableObject {
     /// 整轮都失败时再重试一次。每次失败都写进系统日志：
     /// `log show --last 10m --predicate 'process == "Quotlet" AND eventMessage CONTAINS "[cloud]"'`
     nonisolated static func request(_ method: String, _ path: String, json: [String: Any]? = nil, token: String?) async throws -> (Data, Int) {
-        var req = URLRequest(url: CloudConfig.base.appendingPathComponent(path))
+        let url = URL(string: path, relativeTo: CloudConfig.base)?.absoluteURL ?? CloudConfig.base.appendingPathComponent(path)
+        var req = URLRequest(url: url)
         req.httpMethod = method
         req.timeoutInterval = 20
         req.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -236,7 +238,7 @@ final class Cloud: ObservableObject {
         }
         var firstError: Error?
         for round in 1...2 {
-            let sessions = Network.sessions(allowFallback: true)
+            let sessions = Network.sessions(for: url, allowFallback: true)
             for (i, session) in sessions.enumerated() {
                 let route = (i == 0 && sessions.count > 1) ? "proxy" : "direct"
                 let started = Date()

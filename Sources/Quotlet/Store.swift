@@ -168,6 +168,8 @@ final class Store: ObservableObject {
         }
 
         Notifier.shared.setup { [weak self] in self?.evaluateNotifications() }
+        _ = HookManager.shared
+        _ = RemoteCommandManager.shared
         refreshAll()
         // 开发用：-openHistory YES 启动后直接打开用量历史窗口（截图检查用）
         if UserDefaults.standard.bool(forKey: "openHistory") {
@@ -355,6 +357,7 @@ final class Store: ObservableObject {
                 Notifier.shared.evaluate(provider: "Gemini", limits: g.limitItems(now: Date()))
             }
             CloudSync.shared.localUpdated(snap)   // 演示模式下 CloudSync 自己不上报
+            RemoteCommandManager.shared.localUpdated(snap)
             if pendingLocalRefresh {
                 pendingLocalRefresh = false
                 refreshLocal()

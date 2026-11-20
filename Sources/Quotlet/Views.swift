@@ -626,6 +626,8 @@ struct SettingsView: View {
     @EnvironmentObject var store: Store
     @ObservedObject private var cloud = Cloud.shared
     @ObservedObject private var sync = CloudSync.shared
+    @ObservedObject private var hooks = HookManager.shared
+    @ObservedObject private var remote = RemoteCommandManager.shared
     let onBack: () -> Void
     @State private var portText = ""
 
@@ -781,6 +783,34 @@ struct SettingsView: View {
                 }
                 .disabled(!sync.enabled)
                 .opacity(sync.enabled ? 1 : 0.45)
+                RowGap()
+                SettingsRow {
+                    SettingsLabel(L("精确的会话状态", "Exact session status", ja: "正確なセッション状態", ko: "정확한 세션 상태"),
+                                  icon: "bolt.horizontal",
+                                  detail: hooksDetailText,
+                                  status: hooksStatus)
+                    Spacer()
+                    SwitchToggle(isOn: Binding(get: { hooks.enabled }, set: { hooks.setEnabled($0) }))
+                }
+                RowGap()
+                SettingsRow {
+                    SettingsLabel(L("允许远程指令", "Allow remote commands", ja: "リモートコマンドを許可", ko: "원격 명령 허용"),
+                                  icon: "terminal",
+                                  detail: remoteDetailText,
+                                  status: remoteStatus)
+                    Spacer()
+                    SwitchToggle(isOn: Binding(get: { remote.enabled }, set: { remote.setEnabled($0) }))
+                }
+                if remote.enabled {
+                    RowGap()
+                    SettingsRow {
+                        SettingsLabel(L("执行前本机弹窗确认", "Confirm on this Mac first", ja: "実行前にこの Mac で確認", ko: "실행 전 이 Mac에서 확인"),
+                                      icon: "checkmark.shield",
+                                      detail: L("每条远程指令运行前都需要点击允许", "Ask before running each remote command", ja: "各コマンドの実行前に許可を求めます", ko: "각 원격 명령 실행 전에 허용 여부를 묻습니다"))
+                        Spacer()
+                        SwitchToggle(isOn: $remote.requireConfirmation)
+                    }
+                }
             } else {
                 SettingsRow {
                     SettingsLabel(L("在网站和手机上查看", "View on the web and phone", ja: "Web とスマホで見る", ko: "웹과 휴대폰에서 보기"), icon: "icloud")
@@ -798,6 +828,45 @@ struct SettingsView: View {
             return (L("已同步 · \(Fmt.time(t))", "Synced · \(Fmt.time(t))", ja: "同期済み · \(Fmt.time(t))", ko: "동기화됨 · \(Fmt.time(t))"), true)
         }
         return nil
+    }
+
+    private var hooksDetailText: String {
+        L("向 settings.json 安装 hooks（重写时可能重排 JSON 键顺序），退出登录自动清理",
+          "Installs hooks in settings.json (may reformat JSON keys); removed on sign-out",
+          ja: "settings.json に hooks を追加（JSON の並び順が変わる場合があります）。ログアウト時に自動削除",
+          ko: "settings.json에 hooks를 설치합니다(JSON 키 순서가 바뀔 수 있음). 로그아웃 시 자동 제거")
+    }
+
+    private var hooksStatus: (String, Bool)? {
+        if let err = hooks.lastError { return (err, false) }
+        guard hooks.enabled else { return nil }
+        let targets = hooks.installedTargets.isEmpty ? "Claude Code" : hooks.installedTargets.joined(separator: " · ")
+        return (L("已安装 · \(targets)", "Installed · \(targets)", ja: "導入済み · \(targets)", ko: "설치됨 · \(targets)"), true)
+    }
+
+    private var remoteDetailText: String {
+        var base = L("仅允许在近 30 天使用过的项目目录中执行，默认关闭",
+                     "Only runs in project folders used in the last 30 days. Off by default.",
+                     ja: "直近 30 日間に使ったプロジェクトのみ許可。既定でオフ",
+                     ko: "최근 30일간 사용한 프로젝트 폴더에서만 실행됩니다. 기본값 꺼짐")
+        if let caps = remote.capabilities {
+            let items = [
+                "Claude " + (caps.claude.available ? "✓" : "—"),
+                "Codex " + (caps.codex.available ? "✓" : "—"),
+                "Gemini " + (caps.gemini.available ? (caps.gemini.supportsResume ? "✓" : "✓*") : "—"),
+            ].joined(separator: " · ")
+            base += " · \(items)"
+        }
+        return base
+    }
+
+    private var remoteStatus: (String, Bool)? {
+        if let err = remote.lastError { return (err, false) }
+        guard remote.enabled else { return nil }
+        if remote.wsConnected {
+            return (L("实时通道已连接", "Live channel connected", ja: "リアルタイム接続中", ko: "실시간 채널 연결됨"), true)
+        }
+        return (L("正在连接实时通道…", "Connecting live channel…", ja: "リアルタイム接続中…", ko: "실시간 채널 연결 중…"), false)
     }
 
     private var proxyGroup: some View {

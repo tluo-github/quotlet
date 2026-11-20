@@ -24,6 +24,7 @@ final class CloudSync: ObservableObject {
             resetSent()
             lastError = nil
             kick()
+            RemoteCommandManager.shared.ensureConnectionState()
         }
     }
     /// 关掉后网站和手机上只显示项目名
