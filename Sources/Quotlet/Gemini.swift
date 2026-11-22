@@ -4,8 +4,10 @@ import SQLite3
 // 读 Antigravity（Gemini）写在本机的状态与日志：
 // 1. 额度与套餐：通过本地语言服务器（language_server）暴露的 ConnectRPC 接口查询，
 //    守护配置保存在 ~/.gemini/antigravity/daemon/hub_*.json。
-// 2. 会话与 Token：读取 ~/.gemini/antigravity/brain/<id>/.system_generated/logs/transcript.jsonl
-//    结合 ~/.gemini/antigravity/conversation_summaries.db 提取标题与工作区项目名。
+// 2. 会话与 Token：同时扫描 Antigravity IDE（~/.gemini/antigravity/）与
+//    Antigravity CLI（agy，~/.gemini/antigravity-cli/）下的
+//    brain/<id>/.system_generated/logs/transcript.jsonl，
+//    结合各自的 conversation_summaries.db 提取标题与工作区项目名。
 
 // MARK: - 数据模型
 
@@ -379,14 +381,19 @@ enum GeminiAPI {
 
 struct GeminiFile {
     var id = ""
+    var isCLI = false
     var cwd: String?
     var start: Date?
     var model: String?
     var firstPrompt: String?
     var messages: [MessageUsage] = []
+    var activity: LiveActivity?
 }
 
 enum GeminiLogs {
+    /// Antigravity IDE 写入 ~/.gemini/antigravity，Antigravity CLI（agy）写入 ~/.gemini/antigravity-cli。
+    static let appDataDirNames = ["antigravity", "antigravity-cli"]
+
     static var home: URL {
         if let h = ProcessInfo.processInfo.environment["GEMINI_HOME"], !h.isEmpty { return URL(fileURLWithPath: h) }
         return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini")
@@ -395,17 +402,71 @@ enum GeminiLogs {
     static var brainDir: URL { home.appendingPathComponent("antigravity/brain") }
     static var dbPath: URL { home.appendingPathComponent("antigravity/conversation_summaries.db") }
 
-    /// 读取 conversation_summaries.db 获取会话的标题和工作区路径
-    static func conversationMetas() -> [String: (title: String, project: String, cwd: String?)] {
+    static func brainDirs(in home: URL = Self.home) -> [(url: URL, isCLI: Bool)] {
+        appDataDirNames.map { name in
+            (home.appendingPathComponent("\(name)/brain"), name == "antigravity-cli")
+        }
+    }
+
+    static func dbPaths(in home: URL = Self.home) -> [URL] {
+        appDataDirNames.map { home.appendingPathComponent("\($0)/conversation_summaries.db") }
+    }
+
+    static var watchedPaths: [URL] {
+        var paths: [URL] = []
+        for name in appDataDirNames {
+            let base = home.appendingPathComponent(name)
+            paths.append(base.appendingPathComponent("brain"))
+            paths.append(base.appendingPathComponent("conversation_summaries.db"))
+            paths.append(base.appendingPathComponent("conversation_summaries.db-wal"))
+        }
+        paths.append(home.appendingPathComponent("antigravity/daemon"))
+        return paths
+    }
+
+    /// 读取所有 Antigravity（IDE + CLI）的 conversation_summaries.db 获取会话标题和工作区路径
+    static func conversationMetas(in home: URL = Self.home) -> [String: (title: String, project: String, cwd: String?)] {
+        var out: [String: (title: String, project: String, cwd: String?)] = [:]
+        for path in dbPaths(in: home) {
+            let entries = readConversationMetas(from: path)
+            for (cid, entry) in entries {
+                if let existing = out[cid] {
+                    let title = !entry.title.isEmpty ? entry.title : existing.title
+                    let cwd = entry.cwd ?? existing.cwd
+                    let project = entry.cwd != nil ? entry.project : existing.project
+                    out[cid] = (title: title, project: project, cwd: cwd)
+                } else {
+                    out[cid] = entry
+                }
+            }
+        }
+        return out
+    }
+
+    private static func readConversationMetas(from dbPath: URL) -> [String: (title: String, project: String, cwd: String?)] {
         guard FileManager.default.fileExists(atPath: dbPath.path) else { return [:] }
+        let encodedPath = dbPath.path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? dbPath.path
+        // 优先用 mode=ro 以读取未 checkpoint 的 WAL 写入；目录只读无法建 -shm 时再回退 immutable=1。
+        for uri in ["file:\(encodedPath)?mode=ro", "file:\(encodedPath)?immutable=1"] {
+            if let rows = queryConversationMetas(uri: uri) {
+                return rows
+            }
+        }
+        return [:]
+    }
+
+    private static func queryConversationMetas(uri: String) -> [String: (title: String, project: String, cwd: String?)]? {
         var db: OpaquePointer?
-        let uri = "file:\(dbPath.path)?immutable=1"
-        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK else { return [:] }
+        guard sqlite3_open_v2(uri, &db, SQLITE_OPEN_READONLY | SQLITE_OPEN_URI, nil) == SQLITE_OK else {
+            if let db { sqlite3_close(db) }
+            return nil
+        }
         defer { sqlite3_close(db) }
+        sqlite3_busy_timeout(db, 100)
 
         var stmt: OpaquePointer?
         let sql = "SELECT conversation_id, title, workspace_uris FROM conversation_summaries"
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [:] }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
         defer { sqlite3_finalize(stmt) }
 
         var out: [String: (title: String, project: String, cwd: String?)] = [:]
@@ -438,25 +499,45 @@ enum GeminiLogs {
         return out
     }
 
-    /// 查找在 cutoff 之后修改过的 transcript.jsonl
-    static func files(modifiedAfter cutoff: Date) -> [(url: URL, mtime: Date, size: Int, id: String)] {
+    /// 查找在 cutoff 之后修改过的 transcript.jsonl（合并 IDE 与 CLI 目录，按会话 ID 去重取最新）
+    static func files(modifiedAfter cutoff: Date, in home: URL = Self.home)
+        -> [(url: URL, mtime: Date, size: Int, id: String, isCLI: Bool)] {
         let fm = FileManager.default
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey, .isDirectoryKey]
-        guard let convDirs = try? fm.contentsOfDirectory(at: brainDir, includingPropertiesForKeys: keys) else { return [] }
 
-        var out: [(URL, Date, Int, String)] = []
-        for dir in convDirs {
-            let logFile = dir.appendingPathComponent(".system_generated/logs/transcript.jsonl")
-            guard let v = try? logFile.resourceValues(forKeys: Set(keys)),
-                  let m = v.contentModificationDate, m >= cutoff else { continue }
-            out.append((logFile, m, v.fileSize ?? 0, dir.lastPathComponent))
+        var byId: [String: (url: URL, mtime: Date, size: Int, id: String, isCLI: Bool)] = [:]
+        for (dirRoot, isCLI) in brainDirs(in: home) {
+            guard let convDirs = try? fm.contentsOfDirectory(at: dirRoot, includingPropertiesForKeys: keys) else { continue }
+            for dir in convDirs {
+                let logFile = dir.appendingPathComponent(".system_generated/logs/transcript.jsonl")
+                guard let v = try? logFile.resourceValues(forKeys: Set(keys)),
+                      let m = v.contentModificationDate, m >= cutoff else { continue }
+                let id = dir.lastPathComponent
+                let candidate = (url: logFile, mtime: m, size: v.fileSize ?? 0, id: id, isCLI: isCLI)
+                if let existing = byId[id], existing.mtime >= m { continue }
+                byId[id] = candidate
+            }
         }
-        return out
+        return Array(byId.values)
+    }
+
+    /// 从 Antigravity 的 `<USER_REQUEST>...</USER_REQUEST>` 包装中提取真实用户输入，用作无标题时的回退标题。
+    static func extractUserPrompt(_ raw: String) -> String {
+        let openTag = "<USER_REQUEST>"
+        let closeTag = "</USER_REQUEST>"
+        if let openRange = raw.range(of: openTag) {
+            let afterOpen = raw[openRange.upperBound...]
+            let body = afterOpen.range(of: closeTag).map { afterOpen[..<$0.lowerBound] } ?? afterOpen
+            let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { return trimmed }
+        }
+        return raw.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func needle(_ s: String) -> [UInt8] { Array(s.utf8) }
     private static let nPlanner = needle(#""type":"PLANNER_RESPONSE""#)
     private static let nUserInput = needle(#""type":"USER_INPUT""#)
+    private static let nGeneric = needle(#""type":"GENERIC""#)
     private static let nCreatedAt = needle(#""created_at":""#)
 
     private static func quickCreatedAt(_ p: UnsafeRawPointer, _ len: Int) -> Date? {
@@ -474,12 +555,13 @@ enum GeminiLogs {
     /// transcript.jsonl 中 PLANNER_RESPONSE 的 created_at 为模型开始生成的时间；
     /// 当它触发工具调用（tool_calls）时，紧接着的下一条非 USER_INPUT 步骤（如 GENERIC）的 created_at
     /// 即为本次模型生成完成的时间，差值即为真实回复耗时。
-    static func parse(url: URL, id: String) -> GeminiFile {
-        var f = GeminiFile(id: id)
+    static func parse(url: URL, id: String, isCLI: Bool = false) -> GeminiFile {
+        var f = GeminiFile(id: id, isCLI: isCLI)
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return f }
 
         // 上一条等待结算完成时间的 PLANNER_RESPONSE（下标, 开始时间, 是否含 tool_calls）
         var pendingPlanner: (index: Int, start: Date, hasToolCalls: Bool)?
+        var activity = LiveActivity(id: url.path, source: .gemini)
 
         func contains(_ p: UnsafeRawPointer, _ len: Int, _ n: [UInt8]) -> Bool {
             n.withUnsafeBytes { memmem(p, len, $0.baseAddress, $0.count) != nil }
@@ -503,6 +585,9 @@ enum GeminiLogs {
                 if f.start == nil { f.start = ts }
                 let model = d["model"] as? String ?? f.model ?? "gemini"
                 f.model = model
+                activity.model = model
+                let hasTools = (d["tool_calls"] as? [Any])?.isEmpty == false
+                activity.update(hasTools ? .tools : .idle, at: ts)
                 func int(_ k: String) -> Int { (d[k] as? NSNumber)?.intValue ?? 0 }
                 let input = int("input_tokens")
                 let output = int("output_tokens")
@@ -511,23 +596,31 @@ enum GeminiLogs {
                     let tokens = TokenCount(input: input, output: output, cacheRead: cacheRead, cacheWrite: 0)
                     let idx = f.messages.count
                     f.messages.append(MessageUsage(ts: ts, model: model, tokens: tokens, source: .gemini, duration: nil))
-                    let hasTools = (d["tool_calls"] as? [Any])?.isEmpty == false
                     pendingPlanner = (idx, ts, hasTools)
                 }
             } else if contains(p, len, nUserInput) {
                 // 用户输入前的等待包含人工阅读时间，不计入上一条回复的生成耗时
                 pendingPlanner = nil
+                if let ts = quickCreatedAt(p, len) {
+                    activity.update(.generating, at: ts)
+                }
                 if f.firstPrompt == nil, let d = json(p, len), let msg = d["content"] as? String, !msg.isEmpty {
-                    f.firstPrompt = msg
+                    let cleaned = extractUserPrompt(msg)
+                    if !cleaned.isEmpty { f.firstPrompt = cleaned }
                 }
             } else {
                 // GENERIC（工具执行）/ ERROR_MESSAGE / SYSTEM_MESSAGE 等步骤的 created_at 可结算上一条 PLANNER_RESPONSE 的结束时间
-                if let prev = pendingPlanner, prev.hasToolCalls, let ts = quickCreatedAt(p, len) {
-                    if let dur = SessionScanner.sane(ts.timeIntervalSince(prev.start)) {
-                        f.messages[prev.index].ts = ts
-                        f.messages[prev.index].duration = dur
+                if let ts = quickCreatedAt(p, len) {
+                    if let prev = pendingPlanner, prev.hasToolCalls {
+                        if let dur = SessionScanner.sane(ts.timeIntervalSince(prev.start)) {
+                            f.messages[prev.index].ts = ts
+                            f.messages[prev.index].duration = dur
+                        }
+                        pendingPlanner = nil
                     }
-                    pendingPlanner = nil
+                    if contains(p, len, nGeneric) {
+                        activity.update(.generating, at: ts)
+                    }
                 }
             }
         }
@@ -545,6 +638,7 @@ enum GeminiLogs {
                 off += len + 1
             }
         }
+        f.activity = activity
         return f
     }
 
@@ -582,7 +676,8 @@ enum GeminiLogs {
                 subagentTokens: 0,
                 requests: msgs.count,
                 mainModel: mainModel,
-                source: .gemini
+                source: .gemini,
+                isAntigravityCLI: f.isCLI
             ))
         }
         return (sessions, messages, limits)

@@ -17,6 +17,11 @@ final class Store: ObservableObject {
     @Published private(set) var local: LocalSnapshot?
     @Published private(set) var isScanning = false
 
+    /// 免钥匙串读取 Claude 额度（通过 Claude Code 官方 statusLine 接收实时 rate_limits）
+    @Published private(set) var claudeStatusLineEnabled: Bool = false
+    /// 是否已启用任意一种 Claude 额度来源（免钥匙串 statusLine 或 钥匙串 API）
+    var hasClaudeQuotaSource: Bool { claudeStatusLineEnabled || usageAPIEnabled }
+
     /// 默认只读本机日志。只有用户主动开启后，才可读取 Claude 登录凭证并查询额度接口。
     @Published var usageAPIEnabled: Bool {
         didSet {
@@ -41,6 +46,8 @@ final class Store: ObservableObject {
                 }
                 else { lastUpdated = nil }
                 refreshUsage()
+            } else if claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest {
+                applyStatusLineSnapshot(snap, force: true)
             } else {
                 usage = nil
                 Notifier.shared.cancelResetReminders(provider: "Claude")
@@ -54,8 +61,48 @@ final class Store: ObservableObject {
     private var quotaEstimator = ClaudeQuotaEstimator()
 
     func displayedClaudeUsage(now: Date) -> UsageSnapshot? {
+        if !usageAPIEnabled, claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest {
+            let base = snap.toUsageSnapshot(now: now)
+            return quotaEstimator.display(base, messages: local?.messages ?? [], now: now)
+        }
         guard let usage else { return nil }
         return quotaEstimator.display(usage, messages: local?.messages ?? [], now: now)
+    }
+
+    func setClaudeStatusLineEnabled(_ on: Bool) {
+        ClaudeStatusLineManager.shared.setEnabled(on)
+        claudeStatusLineEnabled = ClaudeStatusLineManager.shared.enabled
+        if claudeStatusLineEnabled {
+            if let snap = ClaudeStatusLineManager.shared.latest {
+                applyStatusLineSnapshot(snap, force: !usageAPIEnabled)
+            }
+        } else if !usageAPIEnabled {
+            usage = nil
+            quotaEstimator = ClaudeQuotaEstimator()
+            Notifier.shared.cancelResetReminders(provider: "Claude")
+            lastUpdated = local == nil ? nil : Date()
+        }
+    }
+
+    private func applyStatusLineSnapshot(_ snap: ClaudeStatusLineSnapshot, force: Bool = false) {
+        guard claudeStatusLineEnabled else { return }
+        if !force, usageAPIEnabled, let current = lastUpdated, snap.observedAt < current {
+            return
+        }
+        let now = Date()
+        let converted = snap.toUsageSnapshot(now: now)
+        guard !converted.limits.isEmpty else { return }
+        usage = converted
+        lastUpdated = snap.observedAt
+        if !usageAPIEnabled {
+            errorMessage = nil
+            needsCredentialAuthorization = false
+            needsProxyHint = false
+        }
+        quotaEstimator.observe(converted, at: snap.observedAt, messages: local?.messages ?? [])
+        Notifier.shared.evaluate(converted)
+        CloudSync.shared.usageUpdated(converted, at: snap.observedAt)
+        HistoryStore.shared.record(provider: "claude", items: converted.limits, at: snap.observedAt)
     }
 
     @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -93,6 +140,7 @@ final class Store: ObservableObject {
             else { UserDefaults.standard.set(language, forKey: "language") }
             // 额度标题是解析时按语言生成的：先用缓存按新语言重新解析，再去网络刷新
             if usageAPIEnabled, let (cached, _) = UsageCache.load() { usage = cached }
+            else if claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest { usage = snap.toUsageSnapshot(now: Date()) }
             refreshUsage()
         }
     }
@@ -144,6 +192,7 @@ final class Store: ObservableObject {
         UserDefaults.standard.register(defaults: ["refreshMinutes": 10])
         let d = UserDefaults.standard
         usageAPIEnabled = UsageAPI.isEnabled()
+        claudeStatusLineEnabled = ClaudeStatusLineManager.shared.enabled
         refreshMinutes = Self.refreshChoices.contains(d.integer(forKey: "refreshMinutes")) ? d.integer(forKey: "refreshMinutes") : 10
         notifyLow = d.bool(forKey: Notifier.Key.low)
         notifyFull = d.bool(forKey: Notifier.Key.full)
@@ -165,6 +214,12 @@ final class Store: ObservableObject {
             lastUpdated = date
             quotaEstimator.observe(cached, at: date, messages: [])
             CloudSync.shared.usageUpdated(cached, at: date)
+        } else if claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest {
+            applyStatusLineSnapshot(snap, force: true)
+        }
+
+        ClaudeStatusLineManager.shared.onSnapshot = { [weak self] snap in
+            self?.applyStatusLineSnapshot(snap)
         }
 
         Notifier.shared.setup { [weak self] in self?.evaluateNotifications() }
@@ -192,10 +247,7 @@ final class Store: ObservableObject {
             CodexLogs.home.appendingPathComponent("archived_sessions"),
             CodexLogs.home.appendingPathComponent("session_index.jsonl"),
             CodexLogs.home.appendingPathComponent("external_agent_session_imports.json"),
-            GeminiLogs.brainDir,
-            GeminiLogs.home.appendingPathComponent("antigravity/daemon"),
-            GeminiLogs.dbPath,
-        ]) { [weak self] in self?.refreshLocal() }
+        ] + GeminiLogs.watchedPaths) { [weak self] in self?.refreshLocal() }
         if !Showcase.enabled && !Demo.enabled {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LegacyApp.check() }
         }
@@ -233,7 +285,7 @@ final class Store: ObservableObject {
     var menuBarShowsWarning: Bool { menuBarSource == .claude && usage == nil && errorMessage != nil }
 
     var menuBarText: String {
-        if menuBarSource == .claude, !usageAPIEnabled {
+        if menuBarSource == .claude, !hasClaudeQuotaSource {
             guard let local else { return "—" }
             let start = Fmt.calendar.startOfDay(for: Date())
             let total = local.messages.lazy.filter { $0.source == .claude && $0.ts >= start }.reduce(0) { $0 + $1.tokens.total }
@@ -254,7 +306,7 @@ final class Store: ObservableObject {
     }
 
     var menuBarSymbol: String {
-        if menuBarSource == .claude, !usageAPIEnabled { return "chart.bar" }
+        if menuBarSource == .claude, !hasClaudeQuotaSource { return "chart.bar" }
         if menuBarShowsWarning { return "exclamationmark.triangle" }
         let limits = menuBarLimits
         let p = max(limits.session?.percent ?? 0, limits.weekly?.percent ?? 0)
@@ -280,6 +332,7 @@ final class Store: ObservableObject {
     }
 
     func refreshAll() {
+        ClaudeStatusLineManager.shared.reloadFromDisk(notify: true)
         refreshUsage()
         refreshLocal(forceGeminiQuota: true)
     }
@@ -346,7 +399,7 @@ final class Store: ObservableObject {
             local = Demo.enabled ? Demo.anonymize(snap) : snap
             isScanning = false
             if let displayed = displayedClaudeUsage(now: Date()) { Notifier.shared.evaluate(displayed) }
-            if !usageAPIEnabled { lastUpdated = Date() }
+            if !hasClaudeQuotaSource { lastUpdated = Date() }
             HistoryStore.shared.merge(local ?? snap, scannedDays: Self.scanDays)   // 演示模式用匿名后的项目名
             if let c = snap.codexLimits { HistoryStore.shared.record(provider: "codex", items: c.limitItems(now: Date()), at: c.observedAt) }
             if let c = snap.codexLimits {

@@ -96,6 +96,31 @@ final class CommandHistoryStore {
         Self.save(snapshot, to: fileURL)
     }
 
+    func remove(id: String) {
+        lock.lock()
+        let before = entries.count
+        entries.removeAll { $0.id == id }
+        let snapshot = entries
+        let changed = entries.count != before
+        lock.unlock()
+        if changed {
+            Self.save(snapshot, to: fileURL)
+        }
+    }
+
+    func clearFinished() {
+        let active: Set<String> = ["queued", "delivered", "running"]
+        lock.lock()
+        let before = entries.count
+        entries.removeAll { !active.contains($0.status) }
+        let snapshot = entries
+        let changed = entries.count != before
+        lock.unlock()
+        if changed {
+            Self.save(snapshot, to: fileURL)
+        }
+    }
+
     private static func load(from url: URL) -> [CommandHistoryEntry] {
         guard let data = try? Data(contentsOf: url) else { return [] }
         let decoder = JSONDecoder()
@@ -196,7 +221,11 @@ struct CommandSecurityValidator {
 
         var rawCwd: String?
         if let sid = command.sessionId, !sid.isEmpty {
-            rawCwd = recent.first(where: { $0.id == sid })?.cwd
+            let prefix = command.provider.lowercased() + "-"
+            let stripped = sid.hasPrefix(prefix) ? String(sid.dropFirst(prefix.count)) : sid
+            rawCwd = recent.first(where: {
+                $0.id == sid || $0.id == stripped || $0.id == prefix + stripped
+            })?.cwd
         }
         if rawCwd == nil, let project = command.project?.trimmingCharacters(in: .whitespacesAndNewlines), !project.isEmpty {
             // 防止目录名里包含路径遍历字符

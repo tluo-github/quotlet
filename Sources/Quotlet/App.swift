@@ -3,9 +3,13 @@ import SwiftUI
 @main
 enum QuotletEntry {
     static func main() {
-        // `--hook` 命令行模式：在 SwiftUI 启动前直接写 events.jsonl 并退出，不启界面、不联网、永远 exit 0
+        // `--hook` / `--statusline` 命令行模式：在 SwiftUI 启动前直接处理 stdin 并退出，不启界面、不联网、不碰钥匙串
         if CommandLine.arguments.contains("--hook") {
             HookCLI.run()
+            return
+        }
+        if CommandLine.arguments.contains("--statusline") {
+            ClaudeStatusLineCLI.run()
             return
         }
         QuotletApp.main()

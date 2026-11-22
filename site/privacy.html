@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — Quotlet</title>
+<meta name="description" content="Quotlet Privacy Policy for macOS, iOS, Android, and Web.">
+<style>
+:root{--bg:#FAFAF8;--fg:#1F1F1E;--fg2:#5A5A56;--line:#E2E2DC;--card:#FFFFFF;--accent:#24734F}
+@media (prefers-color-scheme: dark){:root{--bg:#161618;--fg:#F2F2F0;--fg2:#AEAEA8;--line:#2E2E32;--card:#1F1F23;--accent:#3DD68F}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;line-height:1.7}
+main{max-width:740px;margin:0 auto;padding:40px 20px 72px}
+header{display:flex;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:1px solid var(--line);margin-bottom:28px}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+h1{margin:0 0 8px;font-size:28px}
+h2{margin:28px 0 10px;font-size:19px}
+p,li{font-size:15px;color:var(--fg2)}
+ul{padding-left:20px}
+.meta{font-size:13px;color:var(--fg2);margin-bottom:24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:20px 0}
+hr{border:none;border-top:1px solid var(--line);margin:40px 0}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <strong>Quotlet</strong>
+    <a href="/">← Back to quotlet.com</a>
+  </header>
+
+  <h1>Privacy Policy / 隐私政策</h1>
+  <p class="meta">Effective Date / 生效日期：2026-11-22 · Applies to Quotlet for iOS, Android, macOS, and app.quotlet.com</p>
+
+  <div class="card">
+    <p><strong>Summary:</strong> Quotlet only stores the minimum account, quota, and session metadata required to sync your AI coding tool usage between your Mac and mobile devices. We do not sell your data, run third-party advertising SDKs, or track you across apps.</p>
+  </div>
+
+  <h2>1. Data We Collect</h2>
+  <ul>
+    <li><strong>Account Information:</strong> Your verified email address (via one-time verification code) and/or your GitHub account ID, display name, and verified email when you sign in with GitHub.</li>
+    <li><strong>Device Metadata:</strong> Device name, platform (Mac, iOS, Android, Web), app version, a hashed device identifier (to avoid duplicate device entries), and remote command capability flags.</li>
+    <li><strong>Usage &amp; Session Metadata:</strong> AI quota percentages and reset timestamps, daily token counts by project name (directory name only, not full filesystem paths) and model, session status timelines, and remote command prompts/outputs that you explicitly initiate.</li>
+  </ul>
+
+  <h2>2. Data We Do NOT Collect</h2>
+  <ul>
+    <li>We never upload your Claude, Codex, or Gemini API keys, OAuth tokens, or source code repositories to Quotlet Cloud.</li>
+    <li>We do not collect advertising identifiers (IDFA / AAID), precise location, contacts, photos, or behavioral analytics for ad targeting.</li>
+  </ul>
+
+  <h2>3. How Data Is Stored &amp; Shared</h2>
+  <ul>
+    <li>Data is transmitted over HTTPS (TLS) and stored in Cloudflare D1 solely to provide synchronization and remote command delivery across your signed-in devices.</li>
+    <li>Authentication tokens are stored locally in your device Keychain (iOS/macOS) or private app storage (Android).</li>
+    <li>Transactional login verification emails are delivered via Resend; GitHub OAuth is used only if you choose "Sign in with GitHub".</li>
+  </ul>
+
+  <h2>4. Retention &amp; Account Deletion</h2>
+  <ul>
+    <li>Session status timelines are retained for 30 days; quota history, sessions, and remote commands for 90 days; daily token summaries for 100 days.</li>
+    <li>You can revoke any device at any time from the <strong>Devices</strong> tab.</li>
+    <li>You can permanently delete your entire account and all associated cloud data directly inside the iOS or Android app under <strong>Devices → Delete Account</strong> (or via <code>DELETE /api/me</code>).</li>
+  </ul>
+
+  <h2>5. Contact</h2>
+  <p>For privacy inquiries or data deletion assistance, please contact us via <a href="mailto:support@quotlet.com">support@quotlet.com</a> or open an issue at <a href="https://github.com/tluo-github/quotlet">github.com/tluo-github/quotlet</a>.</p>
+
+  <hr>
+
+  <h2>中文说明</h2>
+  <ul>
+    <li><strong>收集的数据：</strong>仅包含登录所需的邮箱地址（或 GitHub 账号 ID、昵称与已验证邮箱）、设备名称与哈希设备标识、以及你主动开启云同步后上报的额度百分比、会话元数据（仅项目目录名，不含完整路径与源码）、每日 Token 统计及你主动下发的远程指令。</li>
+    <li><strong>不收集的数据：</strong>绝不上传你的 Claude / Codex / Gemini 凭证或代码内容，不包含任何广告 SDK 或跨应用追踪。</li>
+    <li><strong>数据删除与账号注销：</strong>你可随时在 App 的「设备」页吊销单个设备，或点击「设备 → 删除账号」永久删除账号及云端所有关联数据。</li>
+  </ul>
+</main>
+</body>
+</html>

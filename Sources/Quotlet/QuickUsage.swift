@@ -135,7 +135,7 @@ private struct SessionRow: View {
 
     private var meta: String {
         let s = session
-        var parts = [s.source.title, s.project, "\(Fmt.sessionTime(s.start, now: s.end))–\(Fmt.time(s.end))"]
+        var parts = [s.sourceLabel, s.project, "\(Fmt.sessionTime(s.start, now: s.end))–\(Fmt.time(s.end))"]
         if let mainModel, s.mainModel != mainModel { parts.append(Fmt.modelName(s.mainModel)) }
         return parts.joined(separator: " · ")
     }

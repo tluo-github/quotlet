@@ -48,7 +48,7 @@ Copy the following into an AI assistant that can run commands on your Mac.
 
 ### Download
 
-Download **Quotlet-<version>.dmg** from [Releases](https://github.com/tluo-github/quotlet/releases/latest), open it and drag **Quotlet** into **Applications**. The app is signed and notarized by Apple, so it opens with a double-click.
+Download **Quotlet-<version>-arm64.dmg** (Apple silicon) or **Quotlet-<version>-x86_64.dmg** (Intel) from [Releases](https://github.com/tluo-github/quotlet/releases/latest), open it and drag **Quotlet** into **Applications**. The app is signed and notarized by Apple, so it opens with a double-click.
 
 ### Homebrew
 
@@ -98,7 +98,7 @@ Requires the Xcode Command Line Tools (`xcode-select --install`). No third-party
 git clone https://github.com/tluo-github/quotlet.git && cd quotlet
 ./build.sh            # build/Quotlet.app for this Mac
 ./build.sh install    # build, copy to /Applications and launch
-./build.sh release    # universal build: dist/Quotlet-<version>.dmg and .zip
+./build.sh release    # Apple silicon + Intel builds: dist/Quotlet-<version>-{arm64,x86_64}.{dmg,zip}
 ```
 
 Development helpers:

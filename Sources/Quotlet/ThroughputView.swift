@@ -1,14 +1,16 @@
 import Charts
 import SwiftUI
 
-/// 独立的一秒时钟只更新速度区域，不触发额度 API 或整页刷新。
+/// 速度模块：默认折叠成一行紧凑摘要，放在「今天」前面；展开后以独立一秒时钟刷新曲线，不触发额度 API 或整页刷新。
 struct ThroughputView: View {
-    @EnvironmentObject private var store: Store
     let snapshot: LocalSnapshot
     var isLoading = false
+    var now: Date = Date()
+    @AppStorage("throughputExpanded") private var expanded = false
     @AppStorage("throughputSeconds") private var seconds = 60
     @State private var selected: Date?
     @State private var hoveredFraction: Double? = Snapshot.throughputCursorFraction
+    @State private var hoveringHeader = false
     private static let clock: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeZone = Fmt.tz
@@ -17,99 +19,147 @@ struct ThroughputView: View {
     }()
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let speed = Throughput(snapshot: snapshot, now: context.date)
-            let range = [60, 120, 300].contains(seconds) ? seconds : 60
-            let points = speed.points(seconds: range)
-            let readings = speed.readings
-            let recent = readings.contains(where: \.hasRecentResponse)
-            let current = readings.reduce(0) { $0 + $1.speed }
-            let partial = readings.contains(where: \.isPartial)
-            let cursor = hoveredFraction.map { context.date.addingTimeInterval(Double(range) * ($0 - 1)) } ?? selected
-            let focus = cursor.flatMap { date in points.min { abs($0.date.timeIntervalSince(date)) < abs($1.date.timeIntervalSince(date)) } }
-            let peak = points.map(\.total).max() ?? 0
-
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .center, spacing: 10) {
-                    SpeedOrb(speed: current, active: speed.generating > 0, diameter: 44)
-                    HStack(alignment: .firstTextBaseline, spacing: 5) {
-                        Text(isLoading ? "—" : speedText(current, partial: partial))
-                            .font(.system(size: 28, weight: .semibold, design: .rounded).monospacedDigit())
-                            .contentTransition(.numericText())
-                        Text("tok/s").font(Theme.caption).foregroundStyle(Theme.text2)
-                    }
-                    .accessibilityLabel(L("全部 AI 总吞吐", "Total AI throughput", ja: "全 AI の合計スループット", ko: "전체 AI 처리량"))
-                    .help(isLoading ? L("正在读取本机日志…", "Reading local logs…", ja: "ログを読み込み中…", ko: "로컬 로그를 읽는 중…") : status(speed, recent: recent))
-                    Spacer(minLength: 0)
-                    menuBarSourcePicker
+        let isExpanded = expanded || Snapshot.throughputCursorFraction != nil
+        VStack(alignment: .leading, spacing: 6) {
+            if isExpanded {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    expandedContent(at: context.date)
                 }
-                HStack(alignment: .firstTextBaseline) {
-                    Text(L("峰值 ", "Peak ", ja: "ピーク ", ko: "최고 ") + Fmt.speed(peak) + " tok/s")
-                        .font(.system(size: 10.5).monospacedDigit())
-                    Spacer(minLength: 4)
-                    ChipPicker(options: [
-                        (60, L("1 分", "1m", ja: "1 分", ko: "1분")),
-                        (120, L("2 分", "2m", ja: "2 分", ko: "2분")),
-                        (300, L("5 分", "5m", ja: "5 分", ko: "5분"))
-                    ], selection: $seconds, compact: true)
-                }
-                .foregroundStyle(Theme.text2)
-                chart(points, focus: focus, peak: peak)
-                HStack(alignment: .top, spacing: 8) {
-                    ForEach(readings) { reading in
-                        sourceReading(reading)
-                    }
-                }
+            } else {
+                collapsedRow(at: now)
             }
-            .foregroundStyle(Theme.text)
-            .help(L("只计算输出 token（含推理），包含首 token 等待时间，并行请求相加。生成中的 Codex / Claude 按同来源、同模型最近 5 次回复估算；没有样本时显示 —。Gemini 仅在回复完成后计入曲线。日志 2 分钟无活动后停止估算。",
-                    "Output tokens including reasoning, with time to first token; concurrent requests add up. In-flight Codex / Claude requests use the last 5 responses from the same source and model; — means no samples. Gemini appears after completion. Estimates expire after 2 minutes without log activity.",
-                    ja: "推論を含む出力トークン。最初のトークンまでの待ち時間を含み、並列リクエストは合算。Codex / Claude の生成中は同ソース・モデルの直近 5 応答から推定。Gemini は完了後に反映。ログ更新が 2 分間なければ推定を停止。",
-                    ko: "추론을 포함한 출력 토큰과 첫 토큰 대기 시간을 측정하며 병렬 요청은 합산합니다. Codex / Claude 생성 중에는 같은 소스와 모델의 최근 응답 5개로 추정합니다. Gemini는 완료 후 반영되며 2분간 로그 활동이 없으면 추정이 만료됩니다."))
         }
+        .foregroundStyle(Theme.text)
         .onChange(of: seconds) { _, _ in
             selected = nil
             hoveredFraction = nil
         }
     }
 
+    @ViewBuilder
+    private func collapsedRow(at date: Date) -> some View {
+        let speed = Throughput(snapshot: snapshot, now: date)
+        let range = [60, 120, 300].contains(seconds) ? seconds : 60
+        let points = speed.points(seconds: range)
+        let readings = speed.readings
+        let current = readings.reduce(0) { $0 + $1.speed }
+        let partial = readings.contains(where: \.isPartial)
+        let peak = points.map(\.total).max() ?? 0
+
+        Button {
+            withAnimation(.easeInOut(duration: 0.16)) { expanded = true }
+        } label: {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(current > 0 || speed.generating > 0 ? Theme.live : Theme.text2.opacity(0.4))
+                    .frame(width: 6, height: 6)
+                Text(L("生成速度", "Speed", ja: "生成速度", ko: "생성 속도"))
+                    .font(Theme.bodyMedium)
+                    .foregroundStyle(Theme.text)
+                Text(isLoading ? "—" : "\(speedText(current, partial: partial)) tok/s")
+                    .font(Theme.number)
+                    .foregroundStyle(current > 0 ? Theme.text : Theme.text2)
+                Spacer(minLength: 4)
+                if peak > 0 {
+                    Text(L("峰值 ", "Peak ", ja: "ピーク ", ko: "최고 ") + Fmt.speed(peak))
+                        .font(.system(size: 10.5).monospacedDigit())
+                        .foregroundStyle(Theme.text2)
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(Theme.text2)
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 6).fill(hoveringHeader ? Theme.hover : .clear))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, -6)
+        .onHover { hoveringHeader = $0 }
+        .accessibilityLabel(L("展开生成速度曲线", "Expand throughput chart", ja: "生成速度グラフを展開", ko: "생성 속도 그래프 펼치기"))
+    }
+
+    @ViewBuilder
+    private func expandedContent(at date: Date) -> some View {
+        let speed = Throughput(snapshot: snapshot, now: date)
+        let range = [60, 120, 300].contains(seconds) ? seconds : 60
+        let points = speed.points(seconds: range)
+        let readings = speed.readings
+        let recent = readings.contains(where: \.hasRecentResponse)
+        let current = readings.reduce(0) { $0 + $1.speed }
+        let partial = readings.contains(where: \.isPartial)
+        let cursor = hoveredFraction.map { date.addingTimeInterval(Double(range) * ($0 - 1)) } ?? selected
+        let focus = cursor.flatMap { d in points.min { abs($0.date.timeIntervalSince(d)) < abs($1.date.timeIntervalSince(d)) } }
+        let peak = points.map(\.total).max() ?? 0
+
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.16)) { expanded = false }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(L("生成速度", "Speed", ja: "生成速度", ko: "생성 속도"))
+                        .font(Theme.label)
+                        .foregroundStyle(Theme.text2)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(Theme.text2)
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(RoundedRectangle(cornerRadius: 6).fill(hoveringHeader ? Theme.hover : .clear))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, -6)
+            .onHover { hoveringHeader = $0 }
+
+            HStack(alignment: .center, spacing: 10) {
+                SpeedOrb(speed: current, active: speed.generating > 0, diameter: 40)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(isLoading ? "—" : speedText(current, partial: partial))
+                        .font(.system(size: 26, weight: .semibold, design: .rounded).monospacedDigit())
+                        .contentTransition(.numericText())
+                    Text("tok/s").font(Theme.caption).foregroundStyle(Theme.text2)
+                }
+                .accessibilityLabel(L("全部 AI 总吞吐", "Total AI throughput", ja: "全 AI の合計スループット", ko: "전체 AI 처리량"))
+                .help(isLoading ? L("正在读取本机日志…", "Reading local logs…", ja: "ログを読み込み中…", ko: "로컬 로그를 읽는 중…") : status(speed, recent: recent))
+                Spacer(minLength: 0)
+                ChipPicker(options: [
+                    (60, L("1 分", "1m", ja: "1 分", ko: "1분")),
+                    (120, L("2 分", "2m", ja: "2 分", ko: "2분")),
+                    (300, L("5 分", "5m", ja: "5 分", ko: "5분"))
+                ], selection: $seconds, compact: true)
+            }
+
+            HStack(alignment: .firstTextBaseline) {
+                Text(L("峰值 ", "Peak ", ja: "ピーク ", ko: "최고 ") + Fmt.speed(peak) + " tok/s")
+                    .font(.system(size: 10.5).monospacedDigit())
+                Spacer(minLength: 4)
+                Text(status(speed, recent: recent))
+                    .font(.system(size: 10))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(Theme.text2)
+
+            chart(points, focus: focus, peak: peak)
+                .help(L("只计算输出 token（含推理），包含首 token 等待时间，并行请求相加。",
+                        "Output tokens including reasoning, with time to first token; concurrent requests add up.",
+                        ja: "推論を含む出力トークン。最初のトークンまでの待ち時間を含み、並列リクエストは合算。",
+                        ko: "추론을 포함한 출력 토큰과 첫 토큰 대기 시간을 측정하며 병렬 요청은 합산합니다."))
+
+            HStack(alignment: .top, spacing: 8) {
+                ForEach(readings) { reading in
+                    sourceReading(reading)
+                }
+            }
+        }
+    }
+
     private func speedText(_ value: Double, partial: Bool) -> String {
         if partial && value == 0 { return "—" }
         return (partial ? "≥" : "") + Fmt.speed(value)
-    }
-
-    private var menuBarSourcePicker: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            Text(L("状态栏来源", "Menu bar source", ja: "メニューバー", ko: "메뉴 막대 소스"))
-                .font(.system(size: 9.5)).foregroundStyle(Theme.text2)
-            Menu {
-                Picker(L("状态栏来源", "Menu bar source", ja: "メニューバーのソース", ko: "메뉴 막대 소스"), selection: $store.menuBarSource) {
-                    Text("Claude").tag(Source.claude)
-                    Text("Codex").tag(Source.codex)
-                    Text("Gemini").tag(Source.gemini)
-                }
-                .pickerStyle(.inline)
-            } label: {
-                HStack(spacing: 5) {
-                    Text(store.menuBarSource == .claude ? "Claude" : store.menuBarSource.title)
-                        .font(.system(size: 11, weight: .medium))
-                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
-                }
-                .foregroundStyle(Theme.text)
-                .padding(.horizontal, 9).padding(.vertical, 4)
-                .background(Capsule().fill(Theme.hover))
-                .contentShape(Capsule())
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help(L("选择顶部菜单栏显示的额度来源。总吞吐始终汇总全部 AI。",
-                    "Choose the quota source in the menu bar. Throughput always includes all AI sources.",
-                    ja: "メニューバーの使用枠ソースを選択。スループットは全 AI を合算します。",
-                    ko: "메뉴 막대의 한도 소스를 선택합니다. 처리량은 모든 AI 소스를 합산합니다."))
-        }
-        .frame(width: 86, alignment: .trailing)
-        .padding(.top, 1)
     }
 
     private func sourceReading(_ reading: Throughput.Reading) -> some View {

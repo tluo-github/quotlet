@@ -46,7 +46,7 @@ Mac에서 명령을 실행할 수 있는 AI 도우미에게 보내세요.
 
 ### 다운로드
 
-[Releases](https://github.com/tluo-github/quotlet/releases/latest)에서 **Quotlet-<버전>.dmg**를 내려받아 열고 **Quotlet**를 '응용 프로그램'으로 드래그하세요. Apple 서명과 공증을 거쳤으므로 더블 클릭으로 바로 열립니다.
+[Releases](https://github.com/tluo-github/quotlet/releases/latest)에서 칩에 맞게 **Quotlet-<버전>-arm64.dmg**(Apple 실리콘) 또는 **Quotlet-<버전>-x86_64.dmg**(Intel)를 내려받아 열고 **Quotlet**를 '응용 프로그램'으로 드래그하세요. Apple 서명과 공증을 거쳤으므로 더블 클릭으로 바로 열립니다.
 
 ### Homebrew
 
@@ -93,7 +93,7 @@ Xcode Command Line Tools(`xcode-select --install`)가 필요합니다. 서드파
 git clone https://github.com/tluo-github/quotlet.git && cd quotlet
 ./build.sh            # 이 Mac용 build/Quotlet.app 생성
 ./build.sh install    # 빌드 후 '응용 프로그램'에 복사하고 실행
-./build.sh release    # 유니버설 빌드: dist/Quotlet-<버전>.dmg 및 .zip
+./build.sh release    # Apple 실리콘 / Intel 개별 빌드: dist/Quotlet-<버전>-{arm64,x86_64}.{dmg,zip}
 ```
 
 개발용 명령과 코드 구성은 [English README](README.md#build-from-source)를 참고하세요.

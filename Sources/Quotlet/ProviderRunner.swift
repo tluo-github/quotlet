@@ -93,7 +93,8 @@ enum ProviderCommandBuilder {
                 return ProviderCommandInvocation(executable: cliPath, arguments: ["exec", "--json", prompt])
             case .resume:
                 guard let sessionId, !sessionId.isEmpty else { throw ProviderRunnerError.missingSessionId }
-                return ProviderCommandInvocation(executable: cliPath, arguments: ["exec", "resume", sessionId, "--json", prompt])
+                let rawId = sessionId.hasPrefix("codex-") ? String(sessionId.dropFirst("codex-".count)) : sessionId
+                return ProviderCommandInvocation(executable: cliPath, arguments: ["exec", "resume", rawId, "--json", prompt])
             case .fork:
                 throw ProviderRunnerError.unsupportedMode("Codex CLI 不支持分支续聊（--fork-session）")
             }
@@ -105,7 +106,8 @@ enum ProviderCommandBuilder {
                 return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "--output-format", "stream-json"])
             case .resume:
                 guard let sessionId, !sessionId.isEmpty else { throw ProviderRunnerError.missingSessionId }
-                return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "--conversation", sessionId, "--output-format", "stream-json"])
+                let rawId = sessionId.hasPrefix("gemini-") ? String(sessionId.dropFirst("gemini-".count)) : sessionId
+                return ProviderCommandInvocation(executable: cliPath, arguments: ["-p", prompt, "--conversation", rawId, "--output-format", "stream-json"])
             case .fork:
                 throw ProviderRunnerError.unsupportedMode("Antigravity CLI (agy) 暂不支持分支续聊")
             }
@@ -434,6 +436,36 @@ final class SubprocessProviderRunner: Sendable {
         }
     }
 
+    static func buildEnvironment(base: [String: String] = ProcessInfo.processInfo.environment,
+                                 defaults: UserDefaults = .standard) -> [String: String] {
+        var env = base
+        env["PATH"] = CLICapabilityProber.defaultSearchDirectories().joined(separator: ":")
+        env["TERM"] = "xterm-256color"
+
+        if defaults.bool(forKey: Network.Key.enabled) {
+            let host = (defaults.string(forKey: Network.Key.host) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let port = defaults.integer(forKey: Network.Key.port)
+            if !host.isEmpty, (1...65535).contains(port) {
+                let proxyURL = "http://\(host):\(port)"
+                for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"] {
+                    env[key] = proxyURL
+                }
+                let loopback = ["localhost", "127.0.0.1", "::1"]
+                var noProxy = (env["NO_PROXY"] ?? env["no_proxy"] ?? "")
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+                for item in loopback where !noProxy.contains(item) {
+                    noProxy.append(item)
+                }
+                let joined = noProxy.joined(separator: ",")
+                env["NO_PROXY"] = joined
+                env["no_proxy"] = joined
+            }
+        }
+        return env
+    }
+
     private func executeSync(source: Source,
                              invocation: ProviderCommandInvocation,
                              cwd: String,
@@ -448,12 +480,8 @@ final class SubprocessProviderRunner: Sendable {
         proc.currentDirectoryURL = URL(fileURLWithPath: cwd, isDirectory: true)
         proc.standardInput = FileHandle.nullDevice
 
-        // 继承用户环境并补充常见 CLI PATH
-        var env = ProcessInfo.processInfo.environment
-        let extraPath = CLICapabilityProber.defaultSearchDirectories().joined(separator: ":")
-        env["PATH"] = extraPath
-        env["TERM"] = "xterm-256color"
-        proc.environment = env
+        // 继承用户环境、补充常见 CLI PATH，并注入 Quotlet 设置中的 HTTP 代理（GUI App 默认不继承 shell 的代理环境变量）
+        proc.environment = Self.buildEnvironment()
 
         let outPipe = Pipe()
         let errPipe = Pipe()

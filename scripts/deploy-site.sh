@@ -8,18 +8,24 @@ cd "$(dirname "$0")/.."
 
 OUT=build/site
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Resources/Info.plist)
-# 下载按钮直接指向最新发布的 DMG（改名前的版本叫 Quotabar-x.dmg，之后叫 Quotlet-x.dmg）；查不到就退回 Releases 页面
-DMG=$(gh release view --repo tluo-github/quotlet --json assets --jq '.assets[] | select(.name | endswith(".dmg")) | .url' 2>/dev/null | head -1 || true)
-DMG=${DMG:-https://github.com/tluo-github/quotlet/releases/latest}
+# 下载按钮直接指向最新发布的 Apple 芯片（arm64）和 Intel 芯片（x86_64）DMG；查不到就退回单一 DMG 或 Releases 页面
+DMG_ARM64=$(gh release view --repo tluo-github/quotlet --json assets --jq '.assets[] | select(.name | endswith("-arm64.dmg")) | .url' 2>/dev/null | head -1 || true)
+DMG_INTEL=$(gh release view --repo tluo-github/quotlet --json assets --jq '.assets[] | select(.name | endswith("-x86_64.dmg")) | .url' 2>/dev/null | head -1 || true)
+FALLBACK_DMG=$(gh release view --repo tluo-github/quotlet --json assets --jq '.assets[] | select(.name | endswith(".dmg")) | .url' 2>/dev/null | head -1 || true)
+FALLBACK_DMG=${FALLBACK_DMG:-https://github.com/tluo-github/quotlet/releases/latest}
+DMG_ARM64=${DMG_ARM64:-$FALLBACK_DMG}
+DMG_INTEL=${DMG_INTEL:-$FALLBACK_DMG}
 RELEASE=$(gh release view --repo tluo-github/quotlet --json tagName --jq .tagName 2>/dev/null | sed 's/^v//' || true)
 VERSION=${RELEASE:-$VERSION}
 
 rm -rf "$OUT"
 mkdir -p "$OUT/assets"
 cp site/style.css site/main.js site/404.html "$OUT/"
-# 版本号和下载链接：下载按钮直接下最新版 DMG
+[[ -f site/privacy.html ]] && cp site/privacy.html "$OUT/"
+# 版本号和下载链接：下载按钮分别指向最新版 Apple 芯片和 Intel 芯片 DMG
 sed -e "s|{{VERSION}}|${VERSION}|g" \
-    -e "s|data-download href=\"https://github.com/tluo-github/quotlet/releases/latest\"|data-download href=\"${DMG}\"|g" \
+    -e "s|data-download=\"arm64\" href=\"https://github.com/tluo-github/quotlet/releases/latest\"|data-download=\"arm64\" href=\"${DMG_ARM64}\"|g" \
+    -e "s|data-download=\"x86_64\" href=\"https://github.com/tluo-github/quotlet/releases/latest\"|data-download=\"x86_64\" href=\"${DMG_INTEL}\"|g" \
     site/index.html > "$OUT/index.html"
 cp docs/icon.png "$OUT/assets/icon.png"
 cp Sources/Quotlet/ProviderAssets/*.png "$OUT/assets/"

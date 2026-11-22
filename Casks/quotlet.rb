@@ -1,8 +1,11 @@
 cask "quotlet" do
-  version "0.7.1"
-  sha256 "349c5b9b57bc95e70892f9ece54469b22297bf2843c6d3573b2b0a819d5fc243"
+  arch arm: "arm64", intel: "x86_64"
 
-  url "https://github.com/tluo-github/quotlet/releases/download/v#{version}/Quotlet-#{version}.zip"
+  version "0.8.0"
+  sha256 arm:   "71c772bbfa92b0375e2a3e68d9f105c7f1cb22b2422d69f2470ffb8ee165e63c",
+         intel: "a9098b6cbfcc37f4b8456cb203f5467478e0cd2b9bb7af843d59f0f4fff6ebb3"
+
+  url "https://github.com/tluo-github/quotlet/releases/download/v#{version}/Quotlet-#{version}-#{arch}.zip"
   name "Quotlet"
   desc "Claude, Codex, and Gemini usage limits and live tok/s in the menu bar"
   homepage "https://quotlet.com"

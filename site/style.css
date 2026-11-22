@@ -249,6 +249,8 @@ h3 { margin: 0 0 0.7rem; font-size: 17px; line-height: 1.5; font-weight: 600; }
 .ways p { margin: 0; color: var(--sub); font-size: 16px; }
 .ways pre { margin: 0; width: 100%; color: var(--fg); font-size: 13px; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ways .button { margin-top: auto; }
+.download-actions { display: flex; gap: 0.65rem; flex-wrap: wrap; margin-top: auto; }
+.ways .download-actions .button { margin-top: 0; }
 .req { margin: 1.8rem 0 0; padding-left: 1.2rem; color: var(--sub); font-size: 14px; }
 .req li { margin: 0.5rem 0; }
 .foot { margin-top: clamp(4.5rem, 8vw, 7rem); padding: 2rem 0 3rem; border-top: 1px solid var(--line); color: var(--sub); font-size: 14px; }

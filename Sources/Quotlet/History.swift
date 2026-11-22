@@ -960,7 +960,7 @@ private struct SessionColumns {
     static let spacing: CGFloat = 10
     static let rowHeight: CGFloat = 32
     let status: CGFloat = 62
-    let source: CGFloat = 86
+    let source: CGFloat = 112
     let model: CGFloat = 100
     let start: CGFloat = 54
     let duration: CGFloat = 64
@@ -1080,7 +1080,7 @@ private struct SessionTableRow: View {
                 .frame(width: c.project, alignment: .leading).help(s.project)
             HStack(spacing: 5) {
                 Circle().fill(s.source == .codex ? Theme.codex : s.source == .gemini ? Theme.gemini : Theme.data).frame(width: 7, height: 7)
-                Text(s.source.title).lineLimit(1)
+                Text(s.sourceLabel).lineLimit(1)
             }
             .frame(width: c.source, alignment: .leading)
             Text(Fmt.modelName(s.mainModel)).lineLimit(1).frame(width: c.model, alignment: .leading).help(Fmt.modelName(s.mainModel))
@@ -1140,7 +1140,8 @@ extension View {
         switch s.source {
         case .codex: cmd = "codex resume \(rawID(s))"
         case .claude: cmd = "claude --resume \(rawID(s))"
-        case .gemini: cmd = "open -a Antigravity"
+        case .gemini:
+            cmd = s.isAntigravityCLI ? "agy --conversation \(rawID(s))" : "open -a Antigravity"
         }
         return s.cwd.map { "cd '" + $0.replacingOccurrences(of: "'", with: "'\\''") + "' && " + cmd } ?? cmd
     }

@@ -194,4 +194,95 @@ final class HooksAndCapabilitiesTests: XCTestCase {
         XCTAssertTrue(remainingText.contains("echo user-hook"))
         XCTAssertFalse(remainingText.contains("# quotlet-hook"))
     }
+
+    func testClaudeStatusLineCLIParsesPersistsResetsExpiredAndForwardsWrappedCommand() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("quotlet-statusline-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let settingsURL = dir.appendingPathComponent("settings.json")
+        let wrappedURL = dir.appendingPathComponent("wrapped.json")
+        let snapshotURL = dir.appendingPathComponent("limits.json")
+
+        // Pre-populate settings.json with user's custom statusLine & unrelated keys
+        let initial: [String: Any] = [
+            "theme": "dark",
+            "statusLine": [
+                "type": "command",
+                "command": "cat | sed 's/Opus/CUSTOM_OPUS/'",
+                "padding": 2,
+            ],
+        ]
+        try JSONSerialization.data(withJSONObject: initial).write(to: settingsURL)
+
+        let installer1 = ClaudeStatusLineInstaller(
+            claudeSettingsURL: settingsURL,
+            wrappedConfigURL: wrappedURL,
+            executablePath: "/Applications/Quotlet.app/Contents/MacOS/Quotlet"
+        )
+        try installer1.install()
+        XCTAssertEqual(installer1.inspect(), .installed(pathMatches: true))
+
+        // Simulate app move -> inspect detects path mismatch -> reinstall repairs while keeping wrapped command
+        let installer2 = ClaudeStatusLineInstaller(
+            claudeSettingsURL: settingsURL,
+            wrappedConfigURL: wrappedURL,
+            executablePath: "/Users/dev/Quotlet.app/Contents/MacOS/Quotlet"
+        )
+        XCTAssertEqual(installer2.inspect(), .installed(pathMatches: false))
+        try installer2.install()
+        XCTAssertEqual(installer2.inspect(), .installed(pathMatches: true))
+
+        // Run CLI parser + saver + transparent forwarding
+        let t0 = Date(timeIntervalSince1970: 1_774_000_000)
+        let fiveReset: Double = 1_774_010_000   // +10,000s (future at t0)
+        let sevenReset: Double = 1_774_500_000
+        let payload = """
+        {
+          "session_id": "sess-sl-1",
+          "model": { "display_name": "Opus" },
+          "rate_limits": {
+            "five_hour": { "used_percentage": 42.5, "resets_at": \(Int(fiveReset)) },
+            "seven_day": { "used_percentage": 68.0, "resets_at": \(Int(sevenReset)) }
+          }
+        }
+        """.data(using: .utf8)!
+
+        let outPipe = Pipe()
+        if let snap = ClaudeStatusLineCLI.parseSnapshot(from: payload, now: t0) {
+            ClaudeStatusLineCLI.saveSnapshot(snap, to: snapshotURL)
+        }
+        ClaudeStatusLineCLI.forwardToWrappedCommandIfNeeded(
+            stdinData: payload,
+            wrappedConfigURL: wrappedURL,
+            outputHandle: outPipe.fileHandleForWriting
+        )
+        try? outPipe.fileHandleForWriting.close()
+        let forwarded = String(decoding: outPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        XCTAssertTrue(forwarded.contains("CUSTOM_OPUS"))
+
+        let loaded = try XCTUnwrap(ClaudeStatusLineCLI.loadSnapshot(from: snapshotURL))
+        XCTAssertEqual(loaded.sessionId, "sess-sl-1")
+        XCTAssertEqual(loaded.fiveHour?.usedPercentage, 42.5)
+        XCTAssertEqual(loaded.sevenDay?.usedPercentage, 68.0)
+
+        let activeUsage = loaded.toUsageSnapshot(now: t0)
+        XCTAssertEqual(activeUsage.session?.percent, 42.5)
+        XCTAssertEqual(activeUsage.weekly?.percent, 68.0)
+
+        // After five_hour reset passes, 5h resets to 0 while 7d stays intact
+        let afterFiveReset = loaded.toUsageSnapshot(now: Date(timeIntervalSince1970: fiveReset + 60))
+        XCTAssertEqual(afterFiveReset.session?.percent, 0)
+        XCTAssertNil(afterFiveReset.session?.resetsAt)
+        XCTAssertEqual(afterFiveReset.weekly?.percent, 68.0)
+
+        // Uninstall restores user's exact original statusLine & keeps theme
+        try installer2.uninstall()
+        XCTAssertEqual(installer2.inspect(), .notInstalled)
+        let restored = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: settingsURL)) as? [String: Any])
+        XCTAssertEqual(restored["theme"] as? String, "dark")
+        let sl = try XCTUnwrap(restored["statusLine"] as? [String: Any])
+        XCTAssertEqual(sl["command"] as? String, "cat | sed 's/Opus/CUSTOM_OPUS/'")
+        XCTAssertEqual(sl["padding"] as? Int, 2)
+    }
 }

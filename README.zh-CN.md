@@ -50,7 +50,7 @@ Quotlet 默认从本机日志与本地服务统计 **Claude Code**、**Codex** �
 
 ### 下载
 
-从 [Releases](https://github.com/tluo-github/quotlet/releases/latest) 下载 **Quotlet-<版本>.dmg**，打开后把 **Quotlet** 拖进"应用程序"。app 已经过苹果签名和公证，双击就能打开。
+从 [Releases](https://github.com/tluo-github/quotlet/releases/latest) 按芯片下载 **Quotlet-<版本>-arm64.dmg**（Apple 芯片）或 **Quotlet-<版本>-x86_64.dmg**（Intel 芯片），打开后把 **Quotlet** 拖进"应用程序"。app 已经过苹果签名和公证，双击就能打开。
 
 ### Homebrew
 
@@ -98,7 +98,7 @@ brew install --cask quotlet
 git clone https://github.com/tluo-github/quotlet.git && cd quotlet
 ./build.sh            # 编译出 build/Quotlet.app（本机架构）
 ./build.sh install    # 编译、复制到"应用程序"并启动
-./build.sh release    # 通用架构编译，生成 dist/Quotlet-<版本>.dmg 和 .zip
+./build.sh release    # 分别编译 Apple 芯片与 Intel 芯片安装包：dist/Quotlet-<版本>-{arm64,x86_64}.{dmg,zip}
 ```
 
 开发辅助命令、代码结构见 [English README](README.md#build-from-source)。

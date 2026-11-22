@@ -46,7 +46,7 @@ Mac でコマンドを実行できる AI アシスタントに送ってくださ
 
 ### ダウンロード
 
-[Releases](https://github.com/tluo-github/quotlet/releases/latest) から **Quotlet-<バージョン>.dmg** をダウンロードして開き、**Quotlet** を「アプリケーション」にドラッグします。Apple の署名と公証済みなので、ダブルクリックで開けます。
+[Releases](https://github.com/tluo-github/quotlet/releases/latest) からお使いのチップに合わせて **Quotlet-<バージョン>-arm64.dmg**（Apple シリコン）または **Quotlet-<バージョン>-x86_64.dmg**（Intel）をダウンロードして開き、**Quotlet** を「アプリケーション」にドラッグします。Apple の署名と公証済みなので、ダブルクリックで開けます。
 
 ### Homebrew
 
@@ -93,7 +93,7 @@ Xcode Command Line Tools（`xcode-select --install`）が必要です。サー�
 git clone https://github.com/tluo-github/quotlet.git && cd quotlet
 ./build.sh            # この Mac 用に build/Quotlet.app を作成
 ./build.sh install    # ビルドして「アプリケーション」にコピーし起動
-./build.sh release    # ユニバーサルビルド：dist/Quotlet-<バージョン>.dmg と .zip
+./build.sh release    # Apple シリコン / Intel 個別ビルド：dist/Quotlet-<バージョン>-{arm64,x86_64}.{dmg,zip}
 ```
 
 開発用コマンドとコード構成は [English README](README.md#build-from-source) を参照してください。

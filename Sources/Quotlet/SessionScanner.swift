@@ -67,6 +67,13 @@ struct SessionSummary: Identifiable {
     let requests: Int
     let mainModel: String
     var source: Source = .claude
+    var isAntigravityCLI: Bool = false
+
+    /// 界面展示的来源标签：Antigravity CLI 会话区分标记为 `Antigravity CLI`，其余沿用 `source.title`。
+    var sourceLabel: String {
+        if source == .gemini && isAntigravityCLI { return "Antigravity CLI" }
+        return source.title
+    }
 
     func isActive(now: Date) -> Bool { now.timeIntervalSince(end) < 180 }
 }
@@ -171,10 +178,10 @@ actor SessionScanner {
         sessions.sort { $0.end > $1.end }
         messages.sort { $0.ts < $1.ts }
         return LocalSnapshot(sessions: sessions, messages: messages, codexLimits: codex.limits, geminiLimits: gemini.limits,
-                             liveActivities: claude.liveActivities + codex.activities)
+                             liveActivities: claude.liveActivities + codex.activities + gemini.activities)
     }
 
-    private func scanGemini(days: Int, forceQuota: Bool) async -> (sessions: [SessionSummary], messages: [MessageUsage], limits: GeminiLimits?) {
+    private func scanGemini(days: Int, forceQuota: Bool) async -> (sessions: [SessionSummary], messages: [MessageUsage], limits: GeminiLimits?, activities: [LiveActivity]) {
         let cutoff = Date().addingTimeInterval(-Double(days) * 86400)
         let files = GeminiLogs.files(modifiedAfter: cutoff)
         let metas = GeminiLogs.conversationMetas()
@@ -184,12 +191,14 @@ actor SessionScanner {
             if let c = geminiCache[path], c.mtime == f.mtime, c.size == f.size {
                 fresh[path] = c
             } else {
-                fresh[path] = (f.mtime, f.size, GeminiLogs.parse(url: f.url, id: f.id))
+                fresh[path] = (f.mtime, f.size, GeminiLogs.parse(url: f.url, id: f.id, isCLI: f.isCLI))
             }
         }
         geminiCache = fresh
+        let parsed = fresh.values.map(\.stats)
         let limits = await GeminiAPI.fetchQuota(force: forceQuota)
-        return GeminiLogs.build(fresh.values.map(\.stats), metas: metas, cutoff: cutoff, limits: limits)
+        let result = GeminiLogs.build(parsed, metas: metas, cutoff: cutoff, limits: limits)
+        return (result.sessions, result.messages, result.limits, parsed.compactMap(\.activity))
     }
 
     private func scanCodex(days: Int) -> (sessions: [SessionSummary], messages: [MessageUsage], limits: CodexLimits?, activities: [LiveActivity]) {

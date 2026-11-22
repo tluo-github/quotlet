@@ -118,18 +118,20 @@ struct RemoteCommandLogView: View {
             HStack(spacing: 12) {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(remote.wsConnected ? Color.green : Color.orange)
+                        .fill(remote.pollConnected ? Color.green : (remote.enabled ? Color.orange : Color.secondary))
                         .frame(width: 8, height: 8)
-                    Text(remote.wsConnected
-                         ? L("实时通道已连接", "Live channel connected", ja: "リアルタイム接続中", ko: "실시간 채널 연결됨")
-                         : L("实时通道未连接", "Live channel disconnected", ja: "未接続", ko: "연결 끊김"))
+                    Text(remote.pollConnected
+                         ? L("队列轮询正常", "Queue polling active", ja: "ポーリング正常", ko: "큐 폴링 정상")
+                         : (remote.enabled
+                            ? L("等待队列同步…", "Waiting for queue sync…", ja: "同期待ち…", ko: "큐 동기화 대기…")
+                            : L("远程指令已关闭", "Remote commands off", ja: "リモートコマンドオフ", ko: "원격 명령 꺼짐")))
                         .font(.system(size: 13, weight: .semibold))
-                    if !remote.wsRouteLabel.isEmpty {
-                        Text("(\(remote.wsRouteLabel))")
+                    if remote.pendingOutboxCount > 0 {
+                        Text(L("· 待重传 \(remote.pendingOutboxCount) 条", "· \(remote.pendingOutboxCount) retrying", ja: "· 再送待ち \(remote.pendingOutboxCount) 件", ko: "· 재전송 \(remote.pendingOutboxCount)건"))
                             .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.orange)
                     }
-                    if let t = remote.lastWSConnectedAt {
+                    if let t = remote.lastPollAt {
                         Text("· \(Self.timeFmt.string(from: t))")
                             .font(.system(size: 11.5).monospacedDigit())
                             .foregroundStyle(.secondary)
@@ -148,7 +150,7 @@ struct RemoteCommandLogView: View {
                 Button {
                     remote.reconnectAndSync()
                 } label: {
-                    Label(L("重连并拉取排队指令", "Reconnect & Sync Queue", ja: "再接続して同期", ko: "재연결 및 동기화"), systemImage: "arrow.clockwise")
+                    Label(L("立即同步队列", "Sync Queue Now", ja: "今すぐ同期", ko: "지금 큐 동기화"), systemImage: "arrow.clockwise")
                 }
                 .controlSize(.small)
                 .buttonStyle(.borderedProminent)
@@ -300,6 +302,16 @@ struct RemoteCommandLogView: View {
                 Text(Self.dateTimeFmt.string(from: item.receivedAt))
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(.secondary)
+
+                Button {
+                    remote.deleteHistoryEntry(id: item.id)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L("删除这条记录", "Delete this entry", ja: "この履歴を削除", ko: "이 기록 삭제"))
             }
 
             Text(item.prompt)
@@ -448,17 +460,19 @@ struct RemoteTab: View {
             HStack(spacing: 8) {
                 HStack(spacing: 5) {
                     Circle()
-                        .fill(remote.wsConnected ? Color.green : Color.orange)
+                        .fill(remote.pollConnected ? Color.green : (remote.enabled ? Color.orange : Color.secondary))
                         .frame(width: 7, height: 7)
-                    Text(remote.wsConnected
-                         ? L("实时通道已连接", "Live connected", ja: "リアルタイム接続中", ko: "실시간 연결됨")
-                         : L("等待连接…", "Connecting…", ja: "接続待ち…", ko: "연결 중…"))
+                    Text(remote.pollConnected
+                         ? L("队列轮询中", "Queue polling", ja: "ポーリング中", ko: "큐 폴링 중")
+                         : (remote.enabled
+                            ? L("等待队列同步…", "Syncing queue…", ja: "同期中…", ko: "동기화 중…")
+                            : L("远程指令已关闭", "Remote off", ja: "オフ", ko: "꺼짐")))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.text)
-                    if !remote.wsRouteLabel.isEmpty {
-                        Text("· \(remote.wsRouteLabel)")
+                    if remote.pendingOutboxCount > 0 {
+                        Text(L("· 待重传 \(remote.pendingOutboxCount)", "· \(remote.pendingOutboxCount) retrying", ja: "· 再送 \(remote.pendingOutboxCount)", ko: "· 재전송 \(remote.pendingOutboxCount)"))
                             .font(.system(size: 10.5))
-                            .foregroundStyle(Theme.text2)
+                            .foregroundStyle(.orange)
                     }
                 }
                 Spacer()
@@ -537,6 +551,14 @@ struct RemoteTab: View {
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(Theme.text)
                 Spacer()
+                if remote.recentHistory.contains(where: { !["queued", "delivered", "running"].contains($0.status) }) {
+                    Button(L("清空已结束", "Clear finished", ja: "完了分を消去", ko: "완료된 기록 지우기")) {
+                        remote.clearFinishedHistory()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(Theme.text2)
+                }
                 Text("\(remote.recentHistory.count)")
                     .font(.system(size: 10.5).monospacedDigit())
                     .foregroundStyle(Theme.text2)
@@ -595,6 +617,18 @@ struct RemoteTab: View {
                 Text(Self.clockFmt.string(from: item.receivedAt))
                     .font(.system(size: 10).monospacedDigit())
                     .foregroundStyle(Theme.text2)
+                Button {
+                    expandedIds.remove(item.id)
+                    remote.deleteHistoryEntry(id: item.id)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.text2)
+                        .padding(2)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L("删除这条记录", "Delete this entry", ja: "この履歴を削除", ko: "이 기록 삭제"))
             }
 
             Text(item.prompt)
@@ -627,6 +661,14 @@ struct RemoteTab: View {
         .contentShape(Rectangle())
         .onTapGesture {
             if expanded { expandedIds.remove(item.id) } else { expandedIds.insert(item.id) }
+        }
+        .contextMenu {
+            Button(role: .destructive) {
+                expandedIds.remove(item.id)
+                remote.deleteHistoryEntry(id: item.id)
+            } label: {
+                Label(L("删除这条记录", "Delete entry", ja: "この履歴を削除", ko: "이 기록 삭제"), systemImage: "trash")
+            }
         }
     }
 

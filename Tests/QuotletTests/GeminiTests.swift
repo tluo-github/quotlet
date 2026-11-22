@@ -1,3 +1,4 @@
+import SQLite3
 import XCTest
 @testable import Quotlet
 
@@ -221,5 +222,116 @@ final class GeminiTests: XCTestCase {
         }
         // 内部预览代号不估算价格
         XCTAssertNil(Pricing.cost(model: "gemini-4-neon-high", tokens: tokens))
+    }
+
+    func testScansBothAntigravityIDEAndCLIDirectoriesAndWALMetadata() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("gemini-home-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        func writeTranscript(appDir: String, id: String, prompt: String, ts: String) throws -> URL {
+            let logDir = root.appendingPathComponent("\(appDir)/brain/\(id)/.system_generated/logs")
+            try FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)
+            let file = logDir.appendingPathComponent("transcript.jsonl")
+            let content = """
+            {"step_index":0,"type":"USER_INPUT","created_at":"\(ts)","content":"\(prompt)"}
+            {"step_index":1,"type":"PLANNER_RESPONSE","created_at":"\(ts)","model":"gemini-4-neon-high","input_tokens":1500,"cache_read_tokens":200,"output_tokens":120,"content":"OK"}
+            """
+            try content.write(to: file, atomically: true, encoding: .utf8)
+            return file
+        }
+
+        _ = try writeTranscript(
+            appDir: "antigravity",
+            id: "ide-conv-1",
+            prompt: "<USER_REQUEST>\\nIDE 会话\\n</USER_REQUEST>\\n<ADDITIONAL_METADATA>meta</ADDITIONAL_METADATA>",
+            ts: "2026-11-21T09:00:00Z"
+        )
+        _ = try writeTranscript(
+            appDir: "antigravity-cli",
+            id: "cli-conv-1",
+            prompt: "<USER_REQUEST>\\n阅读一下这个项目\\n</USER_REQUEST>\\n<ADDITIONAL_METADATA>meta</ADDITIONAL_METADATA>",
+            ts: "2026-11-21T09:37:15Z"
+        )
+        _ = try writeTranscript(
+            appDir: "antigravity-cli",
+            id: "cli-conv-untitled",
+            prompt: "<USER_REQUEST>\\nReply with exactly: AGY_OK\\n</USER_REQUEST>\\n<ADDITIONAL_METADATA>meta</ADDITIONAL_METADATA>",
+            ts: "2026-11-21T09:40:00Z"
+        )
+
+        // 在 antigravity-cli 的 SQLite 库中启用 WAL 并写入一条记录（保持打开连接以验证未 checkpoint 时也能读取）
+        let cliDBPath = root.appendingPathComponent("antigravity-cli/conversation_summaries.db")
+        var writerDB: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(cliDBPath.path, &writerDB), SQLITE_OK)
+        defer { if let writerDB { sqlite3_close(writerDB) } }
+        let initSQL = """
+        PRAGMA journal_mode=WAL;
+        CREATE TABLE conversation_summaries (conversation_id text PRIMARY KEY, title text, workspace_uris text);
+        INSERT INTO conversation_summaries VALUES ('cli-conv-1', '阅读项目文档', '["file:///Users/dev/Code/sample-asr"]');
+        INSERT INTO conversation_summaries VALUES ('cli-conv-untitled', '', '["file:///Users/dev/Code/quotlet"]');
+        """
+        XCTAssertEqual(sqlite3_exec(writerDB, initSQL, nil, nil, nil), SQLITE_OK)
+
+        let files = GeminiLogs.files(modifiedAfter: Date.distantPast, in: root)
+        XCTAssertEqual(files.count, 3)
+
+        let byId = Dictionary(uniqueKeysWithValues: files.map { ($0.id, $0) })
+        XCTAssertEqual(byId["ide-conv-1"]?.isCLI, false)
+        XCTAssertEqual(byId["cli-conv-1"]?.isCLI, true)
+        XCTAssertEqual(byId["cli-conv-untitled"]?.isCLI, true)
+
+        let metas = GeminiLogs.conversationMetas(in: root)
+        XCTAssertEqual(metas["cli-conv-1"]?.title, "阅读项目文档")
+        XCTAssertEqual(metas["cli-conv-1"]?.project, "sample-asr")
+        XCTAssertEqual(metas["cli-conv-1"]?.cwd, "/Users/dev/Code/sample-asr")
+
+        let parsed = files.map { GeminiLogs.parse(url: $0.url, id: $0.id, isCLI: $0.isCLI) }
+        let built = GeminiLogs.build(parsed, metas: metas, cutoff: Date.distantPast, limits: nil)
+        XCTAssertEqual(built.sessions.count, 3)
+
+        let sessionsById = Dictionary(uniqueKeysWithValues: built.sessions.map { ($0.id, $0) })
+        XCTAssertEqual(sessionsById["gemini-cli-conv-1"]?.title, "阅读项目文档")
+        XCTAssertEqual(sessionsById["gemini-cli-conv-1"]?.project, "sample-asr")
+        XCTAssertEqual(sessionsById["gemini-cli-conv-1"]?.isAntigravityCLI, true)
+        XCTAssertEqual(sessionsById["gemini-cli-conv-1"]?.sourceLabel, "Antigravity CLI")
+
+        // 数据库 title 为空时，回退标题应自动剥离 <USER_REQUEST> 标签
+        XCTAssertEqual(sessionsById["gemini-cli-conv-untitled"]?.title, "Reply with exactly: AGY_OK")
+        XCTAssertEqual(sessionsById["gemini-cli-conv-untitled"]?.sourceLabel, "Antigravity CLI")
+        XCTAssertEqual(sessionsById["gemini-ide-conv-1"]?.title, "IDE 会话")
+        XCTAssertEqual(sessionsById["gemini-ide-conv-1"]?.isAntigravityCLI, false)
+        XCTAssertEqual(sessionsById["gemini-ide-conv-1"]?.sourceLabel, "Gemini")
+    }
+
+    func testGeminiTranscriptTracksLiveActivityPhases() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let file = dir.appendingPathComponent("transcript.jsonl")
+        let generating = """
+        {"step_index":0,"type":"USER_INPUT","created_at":"2026-11-21T09:00:00Z","content":"Hi"}
+        """
+        try generating.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(GeminiLogs.parse(url: file, id: "conv-live", isCLI: true).activity?.phase, .generating)
+
+        let tools = generating + "\n" + """
+        {"step_index":1,"type":"PLANNER_RESPONSE","created_at":"2026-11-21T09:00:02Z","model":"gemini-4-neon-high","input_tokens":500,"output_tokens":50,"tool_calls":[{"name":"run_command"}]}
+        """
+        try tools.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(GeminiLogs.parse(url: file, id: "conv-live", isCLI: true).activity?.phase, .tools)
+
+        let afterTool = tools + "\n" + """
+        {"step_index":2,"type":"GENERIC","created_at":"2026-11-21T09:00:05Z","content":"ok"}
+        """
+        try afterTool.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(GeminiLogs.parse(url: file, id: "conv-live", isCLI: true).activity?.phase, .generating)
+
+        let done = afterTool + "\n" + """
+        {"step_index":3,"type":"PLANNER_RESPONSE","created_at":"2026-11-21T09:00:09Z","model":"gemini-4-neon-high","input_tokens":800,"output_tokens":100,"content":"All set"}
+        """
+        try done.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(GeminiLogs.parse(url: file, id: "conv-live", isCLI: true).activity?.phase, .idle)
     }
 }

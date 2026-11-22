@@ -44,12 +44,6 @@ struct ContentView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 8)
 
-                ThroughputView(snapshot: store.local ?? .empty, isLoading: store.local == nil)
-                    .padding(.horizontal, 14)
-                    .padding(.top, 2)
-                    .padding(.bottom, 8)
-                    .id(store.language)
-
                 Hairline()
                 ChipPicker(options: Tab.allCases.map { ($0, $0.title) }, selection: $tab)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -93,9 +87,32 @@ struct ContentView: View {
         HStack(spacing: 8) {
             Text("Quotlet").font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.text)
-            Text(L("本机全部 AI", "All local AI", ja: "ローカル AI 全体", ko: "모든 로컬 AI"))
-                .font(.system(size: 10.5)).foregroundStyle(Theme.text2)
             Spacer(minLength: 4)
+            Menu {
+                Picker(L("状态栏来源", "Menu bar source", ja: "メニューバーのソース", ko: "메뉴 막대 소스"), selection: $store.menuBarSource) {
+                    Text("Claude").tag(Source.claude)
+                    Text("Codex").tag(Source.codex)
+                    Text("Gemini").tag(Source.gemini)
+                }
+                .pickerStyle(.inline)
+            } label: {
+                HStack(spacing: 4) {
+                    Text(store.menuBarSource == .claude ? "Claude" : store.menuBarSource.title)
+                        .font(.system(size: 10.5, weight: .medium))
+                    Image(systemName: "chevron.down").font(.system(size: 7.5, weight: .semibold))
+                }
+                .foregroundStyle(Theme.text)
+                .padding(.horizontal, 8).padding(.vertical, 3.5)
+                .background(Capsule().fill(Theme.hover))
+                .contentShape(Capsule())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help(L("选择顶部菜单栏显示的额度来源",
+                    "Choose the quota source shown in the menu bar",
+                    ja: "メニューバーに表示する使用枠ソースを選択",
+                    ko: "메뉴 막대에 표시할 한도 소스 선택"))
             AccountButton(cloud: cloud)
         }
     }
@@ -283,19 +300,25 @@ struct UsageTab: View {
                 AdviceCard(advice: advice)
             }
 
-            if !store.usageAPIEnabled {
+            if !store.hasClaudeQuotaSource {
                 HStack(spacing: 8) {
                     Image(systemName: "doc.text.magnifyingglass").foregroundStyle(Theme.text2)
                     Text(L("本地统计模式", "Local stats mode", ja: "ローカル集計モード", ko: "로컬 통계 모드")).font(Theme.bodyMedium)
                     Spacer()
                     ChipButton(title: L("设置", "Settings", ja: "設定", ko: "설정"), action: openSettings)
                 }
-                .help(L("只读本机日志，不读取 Claude 登录凭证。可在设置中开启 Claude 额度接口。", "Reads local logs without accessing your Claude login. Enable the Claude quota API in Settings if needed.", ja: "Claude のログイン情報を読まずにローカルログを集计します。使用枠 API は設定で有効にできます。", ko: "Claude 로그인 정보에 접근하지 않고 로컬 로그만 읽습니다. 한도 API는 설정에서 켤 수 있습니다."))
+                .help(L("只读本机日志，不读取 Claude 登录凭证。可在设置中开启免钥匙串 Claude 额度读取。", "Reads local logs without accessing your Claude login. Enable Keychain-free Claude quota in Settings.", ja: "Claude のログイン情報を読まずにローカルログを集計します。キーチェーン不要の Claude 使用枠は設定で有効にできます。", ko: "Claude 로그인 정보에 접근하지 않고 로컬 로그만 읽습니다. 키체인 없는 Claude 한도 조회는 설정에서 켤 수 있습니다."))
             } else if let u = claudeUsage {
                 ProviderGroup(name: "Claude", plan: u.plan.map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() },
                               source: .claude, limits: u.limits, now: now)
             } else if store.isLoading {
                 LoadingState(text: L("正在获取用量…", "Loading usage…", ja: "使用量を取得中…", ko: "사용량을 불러오는 중…"))
+            } else if store.claudeStatusLineEnabled {
+                Text(L("免钥匙串额度已开启。在 Claude Code 中发一条消息后即自动更新 5 小时和每周额度。",
+                       "Keychain-free quota is on. Send a message in Claude Code to populate 5-hour and weekly limits.",
+                       ja: "キーチェーン不要の使用枠取得がオンです。Claude Code でメッセージを 1 件送ると 5 時間・週間の使用枠が自動更新されます。",
+                       ko: "키체인 없는 한도 조회가 켜져 있습니다. Claude Code에서 메시지를 하나 보내면 5시간 및 주간 한도가 자동으로 업데이트됩니다."))
+                    .font(Theme.caption).foregroundStyle(Theme.text2)
             }
 
             if !codex.isEmpty, let c = store.local?.codexLimits {
@@ -321,6 +344,8 @@ struct UsageTab: View {
             }
 
             if let local = store.local {
+                Hairline()
+                ThroughputView(snapshot: local, isLoading: false, now: now)
                 Hairline()
                 TodayBlock(local: local, now: now)
             }
@@ -629,6 +654,7 @@ struct SettingsView: View {
     @ObservedObject private var cloud = Cloud.shared
     @ObservedObject private var sync = CloudSync.shared
     @ObservedObject private var hooks = HookManager.shared
+    @ObservedObject private var statusLine = ClaudeStatusLineManager.shared
     @ObservedObject private var remote = RemoteCommandManager.shared
     let onBack: () -> Void
     @State private var portText = ""
@@ -737,14 +763,46 @@ struct SettingsView: View {
         }
     }
 
+    private var statusLineStatus: (String, Bool)? {
+        if let err = statusLine.lastError { return (err, false) }
+        guard store.claudeStatusLineEnabled else { return nil }
+        if let latest = statusLine.latest {
+            return (L("已同步 · \(Fmt.time(latest.observedAt))",
+                      "Synced · \(Fmt.time(latest.observedAt))",
+                      ja: "同期済み · \(Fmt.time(latest.observedAt))",
+                      ko: "동기화됨 · \(Fmt.time(latest.observedAt))"), true)
+        }
+        return (L("等待 Claude Code 对话更新…",
+                  "Waiting for next Claude Code message…",
+                  ja: "Claude Code の更新待ち…",
+                  ko: "Claude Code 업데이트 대기 중…"), true)
+    }
+
     private var apiGroup: some View {
-        SettingsGroup(title: L("额度接口", "Quota API", ja: "使用枠 API", ko: "한도 API"),
-                      footer: L("默认关闭。开启后使用本机 Claude Code 登录凭证向 Anthropic 查询 5 小时和每周额度及重置时间。",
-                                "Off by default. Uses your local Claude Code login to fetch 5-hour and weekly quotas and reset times from Anthropic.",
-                                ja: "既定ではオフです。ローカルの Claude Code ログイン情報を使い、Anthropic から 5 時間・週間の使用枠とリセット時刻を取得します。",
-                                ko: "기본값은 꺼짐입니다. 로컬 Claude Code 로그인 정보로 Anthropic에서 5시간 및 주간 한도와 재설정 시간을 조회합니다.")) {
+        SettingsGroup(title: L("Claude 额度", "Claude quota", ja: "Claude 使用枠", ko: "Claude 한도"),
+                      footer: L("推荐使用免钥匙串模式（依赖 Claude Code 2.1.80+ statusLine，不访问钥匙串、不弹窗、不额外联网；若你已有自定义 statusLine 会自动透明保留）。",
+                                "Keychain-free mode is recommended (uses Claude Code 2.1.80+ statusLine with zero Keychain prompts and no extra network calls; existing custom statusLine commands are preserved).",
+                                ja: "キーチェーン不要モードを推奨します（Claude Code 2.1.80+ の statusLine を使用し、キーチェーン確認なし・追加通信なし。既存の statusLine も自動保持されます）。",
+                                ko: "키체인 없는 모드를 권장합니다(Claude Code 2.1.80+ statusLine 사용, 키체인 팝업 및 추가 네트워크 요청 없음, 기존 statusLine 자동 유지).")) {
             SettingsRow {
-                SettingsLabel(L("查询 Claude 额度", "Fetch Claude quota", ja: "Claude の使用枠を取得", ko: "Claude 한도 조회"), icon: "network")
+                SettingsLabel(L("免钥匙串读取额度（推荐）", "Keychain-free quota (Recommended)", ja: "キーチェーン不要で取得（推奨）", ko: "키체인 없이 한도 읽기(권장)"),
+                              icon: "checkmark.shield",
+                              detail: L("使用 Claude Code 时自动获取 5 小时和每周额度",
+                                        "Captures 5-hour and weekly quotas while using Claude Code",
+                                        ja: "Claude Code 使用中に 5 時間・週間枠を自動取得",
+                                        ko: "Claude Code 사용 중 5시간·주간 한도 자동 수집"),
+                              status: statusLineStatus)
+                Spacer()
+                SwitchToggle(isOn: Binding(get: { store.claudeStatusLineEnabled }, set: { store.setClaudeStatusLineEnabled($0) }))
+            }
+            RowGap()
+            SettingsRow {
+                SettingsLabel(L("通过钥匙串接口主动查询", "Active API polling (Keychain)", ja: "キーチェーン API で定期取得", ko: "키체인 API 능동 조회"),
+                              icon: "network",
+                              detail: L("可选。后台定时请求 Anthropic 接口，支持分模型明细与超额费用",
+                                        "Optional. Polls Anthropic in the background for per-model breakdown & extra usage",
+                                        ja: "任意。Anthropic API を定期取得（モデル別内訳・超過利用に対応）",
+                                        ko: "선택 사항. 백그라운드에서 Anthropic API를 주기적으로 조회합니다"))
                 Spacer()
                 SwitchToggle(isOn: $store.usageAPIEnabled)
             }
@@ -869,10 +927,16 @@ struct SettingsView: View {
     private var remoteStatus: (String, Bool)? {
         if let err = remote.lastError { return (err, false) }
         guard remote.enabled else { return nil }
-        if remote.wsConnected {
-            return (L("实时通道已连接", "Live channel connected", ja: "リアルタイム接続中", ko: "실시간 채널 연결됨"), true)
+        if remote.pendingOutboxCount > 0 {
+            return (L("队列轮询中 · 待重传 \(remote.pendingOutboxCount) 条结果",
+                      "Polling queue · \(remote.pendingOutboxCount) result(s) retrying",
+                      ja: "ポーリング中 · 未送信 \(remote.pendingOutboxCount) 件",
+                      ko: "큐 폴링 중 · 재전송 대기 \(remote.pendingOutboxCount)건"), false)
         }
-        return (L("正在连接实时通道…", "Connecting live channel…", ja: "リアルタイム接続中…", ko: "실시간 채널 연결 중…"), false)
+        if remote.pollConnected {
+            return (L("队列轮询已连通", "Queue polling active", ja: "キューポーリング稼働中", ko: "큐 폴링 연결됨"), true)
+        }
+        return (L("正在连接云端队列…", "Connecting to command queue…", ja: "キューへ接続中…", ko: "명령 큐 연결 중…"), false)
     }
 
     private var proxyGroup: some View {

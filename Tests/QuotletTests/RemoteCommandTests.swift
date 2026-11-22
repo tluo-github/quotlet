@@ -27,6 +27,12 @@ final class RemoteCommandTests: XCTestCase {
         let agyResume = try ProviderCommandBuilder.build(source: .gemini, cliPath: "/Users/me/.local/bin/agy", mode: .resume, sessionId: "conv-uuid-1", prompt: "follow up")
         XCTAssertEqual(agyResume.arguments, ["-p", "follow up", "--conversation", "conv-uuid-1", "--output-format", "stream-json"])
 
+        let agyPrefixedResume = try ProviderCommandBuilder.build(source: .gemini, cliPath: "/Users/me/.local/bin/agy", mode: .resume, sessionId: "gemini-conv-uuid-1", prompt: "follow up")
+        XCTAssertEqual(agyPrefixedResume.arguments, ["-p", "follow up", "--conversation", "conv-uuid-1", "--output-format", "stream-json"])
+
+        let codexPrefixedResume = try ProviderCommandBuilder.build(source: .codex, cliPath: "/bin/codex", mode: .resume, sessionId: "codex-t-9", prompt: "more")
+        XCTAssertEqual(codexPrefixedResume.arguments, ["exec", "resume", "t-9", "--json", "more"])
+
         XCTAssertThrowsError(try ProviderCommandBuilder.build(source: .gemini, cliPath: "/Users/me/.local/bin/agy", mode: .fork, sessionId: "conv-uuid-1", prompt: "fork"))
     }
 
@@ -193,6 +199,20 @@ final class RemoteCommandTests: XCTestCase {
 
         let reloaded = CommandHistoryStore(fileURL: file, maxEntries: 2)
         XCTAssertEqual(reloaded.all().map(\.id), ["cmd-3", "cmd-2"])
+
+        // Single delete persists across reload
+        reloaded.remove(id: "cmd-2")
+        XCTAssertEqual(CommandHistoryStore(fileURL: file, maxEntries: 2).all().map(\.id), ["cmd-3"])
+
+        // Clear finished keeps running entries
+        reloaded.upsert(CommandHistoryEntry(
+            id: "cmd-run", provider: "claude", mode: "new", sessionId: nil,
+            project: "quotlet", resolvedCwd: "/tmp/quotlet", prompt: "running",
+            status: "running", result: nil, error: nil, resultSessionId: nil,
+            receivedAt: Date(), finishedAt: nil
+        ))
+        reloaded.clearFinished()
+        XCTAssertEqual(CommandHistoryStore(fileURL: file, maxEntries: 2).all().map(\.id), ["cmd-run"])
     }
 
     func testSubprocessProviderRunnerStreamsAndEnforcesTimeout() async throws {
@@ -258,9 +278,73 @@ final class RemoteCommandTests: XCTestCase {
     }
 
     func testLoopbackURLsBypassHTTPProxy() {
-        let localURL = URL(string: "http://127.0.0.1:8787/api/ws")!
+        let localURL = URL(string: "http://127.0.0.1:8787/api/commands/poll")!
         let sessions = Network.sessions(for: localURL, allowFallback: true)
         XCTAssertEqual(sessions.count, 1)
         XCTAssertNil(sessions[0].configuration.connectionProxyDictionary)
+    }
+
+    func testCommandStatusOutboxPersistsCoalescesAndProtectsTerminalStates() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("quotlet-outbox-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("outbox.json")
+
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        let outbox = CommandStatusOutbox(fileURL: file, maxEntries: 3, maxAge: 3600, now: t0)
+
+        // Running -> Done coalesces on same commandId
+        outbox.upsert(PendingCommandReport(
+            commandId: "cmd-1", status: "running", progress: "step 1", result: nil, error: nil,
+            resultSessionId: nil, updatedAt: t0, attempts: 0
+        ), now: t0)
+        outbox.upsert(PendingCommandReport(
+            commandId: "cmd-1", status: "done", progress: nil, result: "Finished OK", error: nil,
+            resultSessionId: "sess-1", updatedAt: t0.addingTimeInterval(5), attempts: 0
+        ), now: t0.addingTimeInterval(5))
+
+        // Late non-terminal update must not overwrite terminal status
+        outbox.upsert(PendingCommandReport(
+            commandId: "cmd-1", status: "running", progress: "late progress", result: nil, error: nil,
+            resultSessionId: nil, updatedAt: t0.addingTimeInterval(6), attempts: 0
+        ), now: t0.addingTimeInterval(6))
+
+        outbox.recordAttempt(commandId: "cmd-1")
+
+        let reloaded = CommandStatusOutbox(fileURL: file, maxEntries: 3, maxAge: 3600, now: t0.addingTimeInterval(10))
+        let items = reloaded.all(now: t0.addingTimeInterval(10))
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items[0].status, "done")
+        XCTAssertEqual(items[0].result, "Finished OK")
+        XCTAssertEqual(items[0].resultSessionId, "sess-1")
+        XCTAssertEqual(items[0].attempts, 1)
+
+        // Expiration prunes stale entries
+        XCTAssertTrue(reloaded.all(now: t0.addingTimeInterval(4000)).isEmpty)
+
+        // Remove & clear
+        reloaded.remove(commandId: "cmd-1")
+        XCTAssertEqual(reloaded.count, 0)
+    }
+
+    func testSubprocessEnvironmentInjectsConfiguredProxyWithLoopbackBypass() {
+        let suite = "QuotletTests.ProxyEnv.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        defaults.set(true, forKey: Network.Key.enabled)
+        defaults.set("127.0.0.1", forKey: Network.Key.host)
+        defaults.set(7890, forKey: Network.Key.port)
+
+        let env = SubprocessProviderRunner.buildEnvironment(base: [:], defaults: defaults)
+        XCTAssertEqual(env["HTTPS_PROXY"], "http://127.0.0.1:7890")
+        XCTAssertEqual(env["http_proxy"], "http://127.0.0.1:7890")
+        XCTAssertEqual(env["ALL_PROXY"], "http://127.0.0.1:7890")
+        XCTAssertTrue(env["NO_PROXY"]?.contains("127.0.0.1") == true)
+        XCTAssertTrue(env["NO_PROXY"]?.contains("localhost") == true)
+
+        defaults.set(false, forKey: Network.Key.enabled)
+        let directEnv = SubprocessProviderRunner.buildEnvironment(base: [:], defaults: defaults)
+        XCTAssertNil(directEnv["HTTPS_PROXY"])
     }
 }

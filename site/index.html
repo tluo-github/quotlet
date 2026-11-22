@@ -57,7 +57,8 @@
       <h1 data-i18n-html="hero.title">How much quota is left? <em>See it at a glance.</em></h1>
       <p class="lead" data-i18n="hero.lead">Track Claude, Codex and Gemini quotas, live tok/s throughput and reset times from your Mac menu bar. Get a suggestion to switch when one provider is running low.</p>
       <div class="actions">
-        <a class="button primary" data-download href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="cta.dmg">Download .dmg</a>
+        <a class="button primary" data-download="arm64" href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="cta.dmg.arm64">Download Apple Silicon</a>
+        <a class="button" data-download="x86_64" href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="cta.dmg.intel">Download Intel</a>
         <a class="button" href="#install">Homebrew</a>
         <button class="ai-link" type="button" data-copy-key="install.ai.prompt" data-i18n="install.ai.t" aria-live="polite">Ask your AI to install it</button>
       </div>
@@ -156,8 +157,11 @@ brew install --cask quotlet</code></pre>
       </div>
       <div>
         <h3 data-i18n="install.dmg.t">Download</h3>
-        <p data-i18n="install.dmg.d">Open the DMG and drag Quotlet into Applications. Signed and notarized, so it opens with a double-click.</p>
-        <a class="button" data-download href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="cta.dmg">Download .dmg</a>
+        <p data-i18n="install.dmg.d">Choose Apple Silicon or Intel, open the DMG and drag Quotlet into Applications. Signed and notarized, so it opens with a double-click.</p>
+        <div class="download-actions">
+          <a class="button primary" data-download="arm64" href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="install.dmg.arm64">Apple Silicon (.dmg)</a>
+          <a class="button" data-download="x86_64" href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="install.dmg.intel">Intel (.dmg)</a>
+        </div>
       </div>
       <div>
         <h3 data-i18n="install.src.t">Build it yourself</h3>
