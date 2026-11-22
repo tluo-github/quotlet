@@ -56,14 +56,19 @@
     <div>
       <p class="label" data-i18n="hero.label">macOS menu bar · free &amp; open source</p>
       <h1 data-i18n-html="hero.title">How much quota is left? <em>See it at a glance.</em></h1>
-      <p class="lead" data-i18n="hero.lead">Track Claude, Codex and Gemini quotas, live tok/s throughput and reset times from your Mac menu bar. Get a suggestion to switch when one provider is running low.</p>
+      <p class="lead" data-i18n="hero.lead">Quotlet keeps Claude, Codex and Gemini quotas, live tok/s and reset times in your Mac menu bar. When one is about to run out, it warns you early and points you to the one with room to spare.</p>
       <div class="actions">
         <a class="button primary" data-download="arm64" href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="cta.dmg.arm64">Download Apple Silicon</a>
         <a class="button" data-download="x86_64" href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="cta.dmg.intel">Download Intel</a>
-        <a class="button" href="#install">Homebrew</a>
-        <button class="ai-link" type="button" data-copy-key="install.ai.prompt" data-i18n="install.ai.t" aria-live="polite">Ask your AI to install it</button>
       </div>
+      <p class="alt"><a href="#install">Homebrew</a><span aria-hidden="true">·</span><button class="ai-link" type="button" data-copy-key="install.ai.prompt" data-i18n="install.ai.t" aria-live="polite">Ask your AI to install it</button></p>
       <p class="meta"><span data-i18n="hero.meta">macOS 13+ · Apple silicon &amp; Intel · signed &amp; notarized</span> · v{{VERSION}}</p>
+      <ul class="stats">
+        <li><b>3</b><span data-i18n="stat.providers">providers in one view</span></li>
+        <li><b>≈1s</b><span data-i18n="stat.refresh">local refresh</span></li>
+        <li><b>5</b><span data-i18n="stat.langs">languages</span></li>
+        <li><b>MIT</b><span data-i18n="stat.license">open source</span></li>
+      </ul>
     </div>
     <figure class="preview">
       <img data-shot="panel" src="/assets/panel-en-light.webp" width="720" height="1720" fetchpriority="high" alt="Quotlet usage panel">
