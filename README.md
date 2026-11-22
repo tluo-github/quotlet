@@ -4,7 +4,7 @@
 
 **Claude Code, Codex and Gemini usage & live tok/s in the macOS menu bar.**
 
-English | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
+English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
 > **Quotlet was called Quotabar up to version 0.4.1.** Those releases are still named `Quotabar.app` / `Quotabar-<version>.dmg`. The GitHub repo moved from `tluo-github/quotabar` to `tluo-github/quotlet`; old links redirect.
 

@@ -4,7 +4,7 @@
 
 **Claude Code, Codex, Gemini 한도와 실시간 속도(tok/s)를 macOS 메뉴 막대에 표시합니다.**
 
-[English](README.md) | [简体中文](README.zh-CN.md) | [日本語](README.ja.md) | 한국어
+[English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | 한국어
 
 > **Quotlet은 0.4.1까지 Quotabar라는 이름이었습니다.** 해당 버전의 파일 이름은 `Quotabar.app` / `Quotabar-<버전>.dmg` 그대로입니다. GitHub 저장소는 `tluo-github/quotabar`에서 `tluo-github/quotlet`으로 바뀌었고, 예전 링크는 자동으로 연결됩니다.
 

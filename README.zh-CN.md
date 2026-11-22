@@ -4,7 +4,7 @@
 
 **在 macOS 状态栏查看 Claude Code、Codex 和 Gemini 额度与实时速度（tok/s）。**
 
-[English](README.md) | 简体中文 | [日本語](README.ja.md) | [한국어](README.ko.md)
+[English](README.md) | 简体中文 | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
 > **Quotlet 在 0.4.1 及之前叫 Quotabar。** 那些版本的文件名还是 `Quotabar.app` / `Quotabar-<版本>.dmg`。GitHub 仓库从 `tluo-github/quotabar` 改名为 `tluo-github/quotlet`，旧链接会自动跳转。
 

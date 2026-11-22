@@ -2,13 +2,14 @@
 """从 Mac / iOS / Android 源码里的简体中文文案，生成繁体中文（台湾用语）对照表。
 
 App 选繁体时，L() 拿简体文案按这张表转换（最长词优先，查不到的按单字转换）；
-官网 site/main.js 的繁体文案（'zh-Hant'）也由简体那份（zh）整块转换生成。
+官网 site/main.js 的繁体文案（'zh-Hant'）也由简体那份（zh）整块转换生成，
+README.zh-TW.md 由 README.zh-CN.md 转换生成。
 新增或修改中文文案后重新跑一遍即可：
 
     uv run --with opencc python3 scripts/gen-zh-hant.py
 
 转换用 OpenCC 的 s2twp（简体 → 台湾正体 + 台湾常用词），再套用下面 OVERRIDES 里的产品用语。
-生成三个文件（内容相同），并更新 site/main.js 里的繁体文案，这些都不要手改：
+生成三个文件（内容相同），更新 site/main.js 里的繁体文案和 README.zh-TW.md，这些都不要手改：
     Sources/Quotlet/ZhHantData.swift
     ios/Quotlet/ZhHantData.swift
     android/app/src/main/java/com/quotlet/ZhHantData.kt
@@ -30,6 +31,9 @@ GENERATED = {'ZhHantData.swift', 'ZhHantData.kt'}
 OUT_SWIFT = [ROOT / 'Sources/Quotlet/ZhHantData.swift', ROOT / 'ios/Quotlet/ZhHantData.swift']
 OUT_KOTLIN = ROOT / 'android/app/src/main/java/com/quotlet/ZhHantData.kt'
 SITE_JS = ROOT / 'site/main.js'
+README_HANS = ROOT / 'README.zh-CN.md'
+README_HANT = ROOT / 'README.zh-TW.md'
+LANG_LINE = '[English](README.md) | [简体中文](README.zh-CN.md) | 繁體中文 | [日本語](README.ja.md) | [한국어](README.ko.md)'
 
 # OpenCC 转换之前先替换的简体用语（按这个产品里的实际意思消歧义）
 PRE_OVERRIDES = [
@@ -83,6 +87,12 @@ OVERRIDES = [
     ('日誌只讀', '日誌唯讀'),
     ('周', '週'),            # 这个产品里的「周」都是星期
     ('退出', '結束'),        # 退出程序；「退出登录」已在前面换成「登出」
+    ('選單欄', '選單列'),
+    ('倉庫', '儲存庫'),
+    ('許可證', '授權條款'),
+    ('套餐', '方案'),
+    ('倒計時', '倒數計時'),
+    ('許可權', '權限'),
 ]
 
 HAN = r'㐀-䶿一-鿿豈-﫿'
@@ -162,6 +172,20 @@ def update_site(cc):
     SITE_JS.write_text(js, encoding='utf-8')
 
 
+def update_readme(cc):
+    """README.zh-CN.md → README.zh-TW.md：整篇转换，截图换成繁体界面，语言切换行单独写"""
+    lines = []
+    for line in README_HANS.read_text(encoding='utf-8').split('\n'):
+        if line.startswith('[English](README.md)'):
+            lines.append(LANG_LINE)
+            continue
+        out = convert(cc, line).replace('“', '「').replace('”', '」')
+        out = re.sub(r'(docs/[a-z]+)-zh\.png', r'\1-zh-Hant.png', out)
+        lines.append(out)
+    header = '<!-- 自动生成，不要手改：改 README.zh-CN.md 后运行 uv run --with opencc python3 scripts/gen-zh-hant.py -->\n'
+    README_HANT.write_text(header + '\n'.join(lines), encoding='utf-8')
+
+
 def main():
     cc = make_converter()
     runs = collect_runs()
@@ -194,7 +218,8 @@ def main():
     kotlin = header + 'package com.quotlet\n\ninternal object ZhHantData {\n    val PARTS = listOf(\n' + body + ',\n    )\n}\n'
     OUT_KOTLIN.write_text(kotlin, encoding='utf-8')
     update_site(cc)
-    print(f'{len(runs)} 段中文，{len(lines)} 条对照，已写入 {len(OUT_SWIFT) + 1} 个文件，并更新 site/main.js')
+    update_readme(cc)
+    print(f'{len(runs)} 段中文，{len(lines)} 条对照，已写入 {len(OUT_SWIFT) + 1} 个文件，并更新 site/main.js 和 README.zh-TW.md')
 
 
 if __name__ == '__main__':
