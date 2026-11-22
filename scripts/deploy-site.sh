@@ -45,6 +45,13 @@ for lang in en zh zh-Hant ja ko; do
       cwebp -quiet -q 82 -resize "$width" 0 "$source" -o "$OUT/assets/${page}-${lang}-${mode}.webp"
     done
   done
+  # Quotlet Cloud：网页后台（node cloud/scripts/web-demo.mjs --shots）和 iPhone App（scripts/make-ios-screenshots.sh）
+  # 浅色是 docs/<页面>-<语言>.png，深色是 docs/<页面>-<语言>-dark.png
+  for page in web-overview ios-overview ios-commands; do
+    width=1440; [[ $page != ios-* ]] || width=660
+    cwebp -quiet -q 82 -resize "$width" 0 "docs/${page}-${lang}.png" -o "$OUT/assets/${page}-${lang}-light.webp"
+    cwebp -quiet -q 82 -resize "$width" 0 "docs/${page}-${lang}-dark.png" -o "$OUT/assets/${page}-${lang}-dark.webp"
+  done
 done
 
 du -sh "$OUT"

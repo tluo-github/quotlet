@@ -212,6 +212,7 @@ h3 { margin: 0 0 0.7rem; font-size: 17px; line-height: 1.5; font-weight: 600; }
 .points li { padding-left: 1.2rem; border-left: 1px solid var(--line); color: var(--sub); font-size: 16px; }
 .points b { display: block; margin-bottom: 0.4rem; color: var(--fg); font-weight: 600; }
 .points.wide { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2rem; }
+.points.after-strip { margin-top: 2.8rem; }
 .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.3rem; margin-top: 2.5rem; }
 .cards article {
   display: flex;

@@ -27,9 +27,30 @@ Quotlet는 **Claude Code**, **Codex**, **Antigravity(Gemini)**의 토큰, 세션
 - **오늘**: 오늘 Claude Code, Codex, Gemini의 출력·입력 토큰, 요청 수, 평균·최고 속도(tok/s), API 환산 비용.
 - **사용량 기록 창**: 소스와 기간(오늘, 어제, 7/30/90일, 올해, 전체)으로 필터링. 세 제공자 누적 차트와 평균 속도 선, 프로젝트·모델별 추이, 세션 표(오른쪽 클릭으로 재개 명령 복사), CSV 내보내기를 지원하며 일별 합계는 Mac에 남습니다.
 - **알림**: 기본으로 켜져 있습니다. Claude, Codex, Gemini의 사용률이 90%(80%·95% 선택 가능), 100%, 재설정 후에 알립니다. Claude 추정값도 포함됩니다. macOS 알림 권한을 허용하세요.
-- **선택 사항인 Quotlet Cloud**: GitHub로 로그인하면 [app.quotlet.com](https://app.quotlet.com)의 웹과 휴대폰에서 Claude, Codex, Gemini의 한도, 세션, 분석, 페이지 내 알림을 볼 수 있습니다. 로그인하지 않으면 꺼져 있습니다.
+- **선택 사항인 Quotlet Cloud**: GitHub 또는 이메일 인증 코드로 로그인하면 웹 대시보드와 iPhone 앱에서 한도, 세션, 분석을 확인하고 Mac에 원격 명령도 보낼 수 있습니다(아래 참고). 로그인하지 않으면 꺼져 있습니다.
 - **5개 언어 지원**: English, 简体中文, 繁體中文, 日本語, 한국어. 시스템 언어를 따르거나 설정에서 고를 수 있습니다. 화면 모드는 라이트·다크·자동.
 - 새로 고침 주기 설정과 HTTP 프록시를 지원하며, Anthropic에 연결할 수 없으면 프록시 설정을 안내합니다.
+
+## Quotlet Cloud: 웹 대시보드와 iPhone 앱
+
+선택 기능입니다. Mac 앱에서 GitHub 또는 이메일 인증 코드로 로그인하면 한도, 토큰 수, 세션 상태가 Quotlet Cloud에 동기화되어 Mac 앞에 없어도 확인할 수 있습니다. 프롬프트와 코드는 Mac 밖으로 나가지 않으며, 로그인하지 않으면 아무것도 동기화되지 않습니다.
+
+- **웹 대시보드**([app.quotlet.com](https://app.quotlet.com)): Mac별 Claude, Codex, Gemini 한도, 실시간 세션 상태(실행 중, 승인 대기, 완료), 제공자·프로젝트·모델별 사용량 분석, 최근 90일 한도 기록, 페이지 내 알림, 기기 관리. 5개 언어와 라이트·다크 테마를 지원합니다.
+- **원격 명령**: 브라우저나 휴대폰에서 Mac의 Claude Code, Codex, Antigravity에 명령을 보내 새 세션을 시작하거나 기존 세션을 이어 갈 수 있습니다. 기본적으로 꺼져 있으며 해당 Mac의 Quotlet 설정에서 켭니다. 최근 30일 안에 사용한 프로젝트에서만 실행되고 모든 명령이 기록됩니다.
+- **iPhone 앱**(App Store 출시 예정): 개요, 세션, 원격 명령, 분석, 기기 관리를 네이티브 앱으로 제공합니다. Android 버전도 개발 중입니다.
+
+<img src="docs/web-overview-ko.png" alt="웹 대시보드: 한도와 최근 세션">
+
+<p>
+  <img src="docs/web-stats-ko.png" width="49%" alt="웹 대시보드: 사용량 분석">
+  <img src="docs/web-commands-ko.png" width="49%" alt="웹 대시보드: 원격 명령">
+</p>
+
+<p>
+  <img src="docs/ios-overview-ko.png" width="32%" alt="iPhone 앱: 개요">
+  <img src="docs/ios-sessions-ko.png" width="32%" alt="iPhone 앱: 세션">
+  <img src="docs/ios-commands-ko.png" width="32%" alt="iPhone 앱: 원격 명령">
+</p>
 
 ## 요구 사항
 

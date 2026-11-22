@@ -29,9 +29,30 @@ Quotlet tracks **Claude Code**, **Codex** and **Antigravity (Gemini)** tokens, s
 - **Quick sessions and stats**: switch between **Quotas**, **Sessions** and **Stats** right inside the menu-bar panel to inspect recent sessions or 7/30-day summaries without opening History.
 - **Usage history window**: filter by provider and range (today, yesterday, 7/30/90 days, this year, all). Stacked Claude / Codex / Gemini daily charts with speed line, project trends (toggle projects to compare total or output tokens), weekly limits, model breakdowns, session table with resume commands, and CSV export. Daily totals stay on your Mac after old logs are cleared.
 - **Quota notifications**: enabled by default at 90% (80% or 95% also available), at 100%, and after a reset across Claude, Codex and Gemini. Claude local estimates can trigger alerts between API refreshes, with an estimate label and one alert of each kind per window. Allow macOS notifications when prompted.
-- **Optional Quotlet Cloud**: sign in with GitHub to see Claude, Codex and Gemini limits, sessions, analytics and in-page alerts at [app.quotlet.com](https://app.quotlet.com), on the web or your phone. Off until you sign in.
+- **Optional Quotlet Cloud**: sign in with GitHub or an email code to check quotas, sessions and analytics on the web dashboard and the iPhone app, and to send remote commands to your Mac (details below). Off until you sign in.
 - **Five languages**: English, 简体中文, 繁體中文, 日本語 and 한국어. Follows your system language or pick one in Settings. Light, dark or automatic appearance.
 - Configurable refresh interval and an optional HTTP proxy, with a hint when Anthropic can't be reached.
+
+## Quotlet Cloud: web dashboard and iPhone app
+
+Optional. Sign in from the Mac app with GitHub or an email code, and your quotas, token counts and session status sync to Quotlet Cloud so you can check them away from your Mac. Prompts and code stay on your Mac, and nothing syncs until you sign in.
+
+- **Web dashboard** at [app.quotlet.com](https://app.quotlet.com): Claude, Codex and Gemini quotas for each Mac, live session status (running, waiting for approval, done), usage analytics by provider, project and model, 90 days of quota history, in-page alerts and device management. Five languages, light and dark themes.
+- **Remote commands**: from the browser or your phone, send a prompt to Claude Code, Codex or Antigravity on your Mac to start a new session or continue one. Off by default and switched on per Mac in Quotlet's settings; only projects used in the last 30 days are allowed, and every command is logged.
+- **iPhone app** (coming soon to the App Store): overview, sessions, remote commands, analytics and devices in a native app. An Android version is also in the works.
+
+<img src="docs/web-overview-en.png" alt="Web dashboard: quotas and recent sessions">
+
+<p>
+  <img src="docs/web-stats-en.png" width="49%" alt="Web dashboard: usage analytics">
+  <img src="docs/web-commands-en.png" width="49%" alt="Web dashboard: remote commands">
+</p>
+
+<p>
+  <img src="docs/ios-overview-en.png" width="32%" alt="iPhone app: overview">
+  <img src="docs/ios-sessions-en.png" width="32%" alt="iPhone app: sessions">
+  <img src="docs/ios-commands-en.png" width="32%" alt="iPhone app: remote commands">
+</p>
 
 ## Requirements
 
@@ -111,6 +132,10 @@ Development helpers:
 # Regenerate the README and website screenshots for all five languages
 # (LANGS="zh-Hant" renders just one language, OFFLINE=1 uses cached usage only)
 scripts/make-screenshots.sh
+# Web dashboard screenshots: local D1 + wrangler dev + demo data, nothing touches production
+node cloud/scripts/web-demo.mjs --shots   # or without --shots to browse it at localhost:8789
+# iPhone app screenshots from the simulator's demo mode (needs a booted iPhone simulator)
+scripts/make-ios-screenshots.sh
 # After editing Simplified Chinese text, regenerate Traditional Chinese for the apps,
 # the website and README.zh-TW.md (OpenCC s2twp + Taiwan product terms)
 uv run --with opencc python3 scripts/gen-zh-hant.py
@@ -135,10 +160,12 @@ swift scripts/make-icon.swift
 | `Throughput.swift`, `ThroughputView.swift` | Real-time `tok/s` engine, speed gauge and 1m / 2m / 5m chart |
 | `Store.swift`, `Advice.swift`, `Pricing.swift` | App state, cross-provider switch advice and API-equivalent pricing |
 | `Views.swift`, `QuickUsage.swift`, `History.swift`, `HistoryStore.swift` | Panel, Sessions/Stats tabs, History window and local archive |
-| `Cloud.swift`, `CloudSync.swift` | Optional GitHub OAuth sign-in and incremental sync to `app.quotlet.com` |
+| `Cloud.swift`, `CloudSync.swift` | Optional GitHub / email-code sign-in and incremental sync to `app.quotlet.com` |
 | `Theme.swift`, `Format.swift`, `Notifier.swift` | Dynamic theme, 5 languages, formatting and quota notifications |
 | `ZhHant.swift`, `ZhHantData.swift`, `scripts/gen-zh-hant.py` | Traditional Chinese: converts Simplified text with a generated lookup table (also used by iOS / Android) |
 | `Snapshot.swift`, `Showcase.swift`, `Demo.swift` | Offscreen screenshot, demo-window and sample-data helpers |
+| `cloud/` | Quotlet Cloud: Cloudflare Worker + D1 backend and the web dashboard (`cloud/web/static`) |
+| `ios/`, `android/` | iPhone app (SwiftUI) and Android app (Jetpack Compose) |
 | `Casks/quotlet.rb` | Homebrew cask |
 | `docs/architecture.md`, `docs/cloud-design.md` | System architecture and Cloud design documentation |
 

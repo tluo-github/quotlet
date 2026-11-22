@@ -27,9 +27,30 @@ Quotlet は **Claude Code**、**Codex**、**Antigravity（Gemini）** のトー�
 - **今日**：今日の Claude Code・Codex・Gemini の出力・入力トークン、リクエスト数、平均・ピーク速度（tok/s）、API 換算の費用。
 - **使用量の履歴ウィンドウ**：ソースと期間（今日、昨日、7/30/90 日、今年、すべて）で絞り込み。3 サービス積み上げグラフと平均速度の線、プロジェクト推移・モデル別内訳、セッション一覧（右クリックで再開コマンドをコピー）、CSV 書き出しに対応。日ごとの合計は Mac に残ります。
 - **通知**：既定でオンです。Claude・Codex・Gemini の使用率が 90%（80%・95% も選択可）、100%、リセット後に通知します。Claude の推定値も対象です。macOS の通知を許可してください。
-- **任意の Quotlet Cloud**：GitHub でログインすると、[app.quotlet.com](https://app.quotlet.com) の Web やスマートフォンで Claude・Codex・Gemini の上限、セッション、分析、ページ内アラートを確認できます。ログインしなければ無効のままです。
+- **任意の Quotlet Cloud**：GitHub またはメールの認証コードでログインすると、Web ダッシュボードや iPhone アプリで使用枠・セッション・分析を確認でき、Mac にリモートコマンドも送れます（詳しくは下記）。ログインしなければ無効のままです。
 - **5 言語対応**：English、简体中文、繁體中文、日本語、한국어。システムに合わせるか設定で選べます。外観はライト・ダーク・自動。
 - 更新間隔の設定と HTTP プロキシに対応し、Anthropic に接続できないときはプロキシ設定を案内します。
+
+## Quotlet Cloud：Web ダッシュボードと iPhone アプリ
+
+任意の機能です。Mac アプリから GitHub またはメールの認証コードでログインすると、使用枠、トークン数、セッションの状態が Quotlet Cloud に同期され、Mac から離れていても確認できます。プロンプトやコードは Mac から出ず、ログインしない限り何も同期されません。
+
+- **Web ダッシュボード**（[app.quotlet.com](https://app.quotlet.com)）：Mac ごとの Claude・Codex・Gemini の使用枠、セッションのリアルタイムな状態（実行中・承認待ち・完了）、プロバイダー・プロジェクト・モデル別の使用量分析、直近 90 日の使用枠の履歴、ページ内アラート、デバイス管理。5 言語とライト・ダークに対応しています。
+- **リモートコマンド**：ブラウザやスマートフォンから Mac の Claude Code・Codex・Antigravity に指示を送り、新しいセッションを始めたり既存のセッションを続けたりできます。既定でオフで、その Mac の Quotlet 設定でオンにします。直近 30 日に使ったプロジェクトでのみ実行でき、すべてのコマンドが記録されます。
+- **iPhone アプリ**（App Store で近日公開）：概要、セッション、リモートコマンド、分析、デバイス管理をネイティブアプリで。Android 版も開発中です。
+
+<img src="docs/web-overview-ja.png" alt="Web ダッシュボード：使用枠と最近のセッション">
+
+<p>
+  <img src="docs/web-stats-ja.png" width="49%" alt="Web ダッシュボード：使用量の分析">
+  <img src="docs/web-commands-ja.png" width="49%" alt="Web ダッシュボード：リモートコマンド">
+</p>
+
+<p>
+  <img src="docs/ios-overview-ja.png" width="32%" alt="iPhone アプリ：概要">
+  <img src="docs/ios-sessions-ja.png" width="32%" alt="iPhone アプリ：セッション">
+  <img src="docs/ios-commands-ja.png" width="32%" alt="iPhone アプリ：リモートコマンド">
+</p>
 
 ## 動作環境
 

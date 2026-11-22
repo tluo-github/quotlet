@@ -31,9 +31,30 @@ Quotlet 默认从本机日志与本地服务统计 **Claude Code**、**Codex** �
 - **今天**：今天 Claude Code、Codex 和 Gemini 的输出、输入 token、请求数、平均和峰值速度（tok/s），以及 API 等值费用。
 - **用量历史窗口**：按来源（全部 / Claude Code / Codex / Gemini）和时间段（今天、昨天、7/30/90 天、今年、全部）筛选。支持三家堆叠柱状图叠加速度曲线、项目趋势折线（默认全选，可勾选对比总 token 或输出 token）、每周额度、模型分布和会话表，并可导出 CSV。每日汇总保存在本机，旧日志清理后也不影响历史。
 - **额度通知**：默认开启，达到 90%（可选 80% 或 95%）、用完 100%、重置恢复时提醒。Claude、Codex 和 Gemini 的各窗口均适用，Claude 本机估算也会触发提醒并注明估算，每个窗口的每类提醒只发一次。首次启动时允许 macOS 通知。
-- **可选的 Quotlet Cloud**：用 GitHub 登录后，在 [app.quotlet.com](https://app.quotlet.com) 的网页和手机上统一查看 Claude、Codex 和 Gemini 的额度、会话、用量分析与网页内告警。不登录就不开启。
+- **可选的 Quotlet Cloud**：用 GitHub 或邮箱验证码登录后，可以在网页后台和 iPhone App 上查看额度、会话和用量分析，还能给 Mac 发远程指令（详见下文）。不登录就不开启。
 - **五种语言**：简体中文、繁體中文、English、日本語、한국어，默认跟随系统，也可以在设置里切换。外观支持浅色、深色和自动。
 - 刷新频率可调，支持 HTTP 代理；连不上 Anthropic 时会提示去设置代理。
+
+## Quotlet Cloud：网页后台和 iPhone App
+
+可选功能。在 Mac 上用 GitHub 或邮箱验证码登录后，额度、token 数量和会话状态会同步到 Quotlet Cloud，不在电脑前也能查看。提示词和代码不会离开你的 Mac，不登录就不会同步任何东西。
+
+- **网页后台** [app.quotlet.com](https://app.quotlet.com)：按 Mac 查看 Claude、Codex 和 Gemini 的额度，实时看到会话状态（执行中、等待授权、已完成），按来源、项目和模型分析用量，查看最近 90 天的额度历史，还有网页内告警和设备管理。支持五种语言和浅色、深色主题。
+- **远程指令**：在浏览器或手机上给 Mac 上的 Claude Code、Codex 或 Antigravity 发指令，新建会话或接着已有会话继续。默认关闭，需要在那台 Mac 的 Quotlet 设置里手动开启；只能在最近 30 天用过的项目里执行，每条指令都有记录。
+- **iPhone App**（即将上架 App Store）：概览、会话、远程指令、用量分析和设备管理都做成了原生 App。Android 版也在开发中。
+
+<img src="docs/web-overview-zh.png" alt="网页后台：额度和最近的会话">
+
+<p>
+  <img src="docs/web-stats-zh.png" width="49%" alt="网页后台：用量分析">
+  <img src="docs/web-commands-zh.png" width="49%" alt="网页后台：远程指令">
+</p>
+
+<p>
+  <img src="docs/ios-overview-zh.png" width="32%" alt="iPhone App：概览">
+  <img src="docs/ios-sessions-zh.png" width="32%" alt="iPhone App：会话">
+  <img src="docs/ios-commands-zh.png" width="32%" alt="iPhone App：远程指令">
+</p>
 
 ## 系统要求
 
