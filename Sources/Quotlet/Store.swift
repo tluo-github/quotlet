@@ -153,7 +153,7 @@ final class Store: ObservableObject {
         }
     }
 
-    /// 界面语言："" = 跟随系统，否则 zh / en / ja / ko
+    /// 界面语言："" = 跟随系统，否则 zh / zh-Hant / en / ja / ko
     @Published var language: String {
         didSet {
             if language.isEmpty { UserDefaults.standard.removeObject(forKey: "language") }

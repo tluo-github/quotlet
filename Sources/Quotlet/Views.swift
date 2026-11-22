@@ -666,7 +666,7 @@ struct LimitRow: View {
         let moment = Text(Fmt.resetMoment(r, now: now))
         var line: Text
         switch Lang.current {
-        case .zh: line = moment + Text(" 重置")
+        case .zh, .zhHant: line = moment + Text(zhText(" 重置"))
         case .en: line = Text("Resets ") + moment
         case .ja: line = moment + Text(" にリセット")
         case .ko: line = moment + Text(" 재설정")
@@ -751,7 +751,7 @@ struct SettingsView: View {
                 SettingsLabel(L("界面语言", "Language", ja: "言語", ko: "언어"), icon: "globe")
                 Spacer(minLength: 4)
                 ChipPicker(options: [("", L("自动", "Auto", ja: "自動", ko: "자동")),
-                                     ("zh", "中文"), ("en", "EN"), ("ja", "日本語"), ("ko", "한국어")],
+                                     ("zh", "简体"), ("zh-Hant", "繁體"), ("en", "EN"), ("ja", "日本語"), ("ko", "한국어")],
                            selection: $store.language, compact: true)
                     .fixedSize()
             }

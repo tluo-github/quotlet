@@ -30,7 +30,7 @@ Quotlet tracks **Claude Code**, **Codex** and **Antigravity (Gemini)** tokens, s
 - **Usage history window**: filter by provider and range (today, yesterday, 7/30/90 days, this year, all). Stacked Claude / Codex / Gemini daily charts with speed line, project trends (toggle projects to compare total or output tokens), weekly limits, model breakdowns, session table with resume commands, and CSV export. Daily totals stay on your Mac after old logs are cleared.
 - **Quota notifications**: enabled by default at 90% (80% or 95% also available), at 100%, and after a reset across Claude, Codex and Gemini. Claude local estimates can trigger alerts between API refreshes, with an estimate label and one alert of each kind per window. Allow macOS notifications when prompted.
 - **Optional Quotlet Cloud**: sign in with GitHub to see Claude, Codex and Gemini limits, sessions, analytics and in-page alerts at [app.quotlet.com](https://app.quotlet.com), on the web or your phone. Off until you sign in.
-- **Four languages**: English, 简体中文, 日本語 and 한국어. Follows your system language or pick one in Settings. Light, dark or automatic appearance.
+- **Five languages**: English, 简体中文, 繁體中文, 日本語 and 한국어. Follows your system language or pick one in Settings. Light, dark or automatic appearance.
 - Configurable refresh interval and an optional HTTP proxy, with a hint when Anthropic can't be reached.
 
 ## Requirements
@@ -132,7 +132,7 @@ swift scripts/make-icon.swift
 | `Store.swift`, `Advice.swift`, `Pricing.swift` | App state, cross-provider switch advice and API-equivalent pricing |
 | `Views.swift`, `QuickUsage.swift`, `History.swift`, `HistoryStore.swift` | Panel, Sessions/Stats tabs, History window and local archive |
 | `Cloud.swift`, `CloudSync.swift` | Optional GitHub OAuth sign-in and incremental sync to `app.quotlet.com` |
-| `Theme.swift`, `Format.swift`, `Notifier.swift` | Dynamic theme, 4 languages, formatting and quota notifications |
+| `Theme.swift`, `Format.swift`, `Notifier.swift` | Dynamic theme, 5 languages, formatting and quota notifications |
 | `Snapshot.swift`, `Showcase.swift`, `Demo.swift` | Offscreen screenshot, demo-window and sample-data helpers |
 | `Casks/quotlet.rb` | Homebrew cask |
 | `docs/architecture.md`, `docs/cloud-design.md` | System architecture and Cloud design documentation |

@@ -1,17 +1,25 @@
 import Foundation
 
-/// 界面语言：简体中文 / English / 日本語 / 한국어。默认跟随系统首选语言（其他语言显示英文），
+/// 界面语言：简体中文 / 繁體中文 / English / 日本語 / 한국어。默认跟随系统首选语言（其他语言显示英文），
 /// 也可以在设置里手动指定（存在 UserDefaults 的 "language"，空 = 跟随系统）。
+/// 繁体不单独写文案：L() 把简体文案按 ZhHant 对照表转换。
 enum Lang: String, CaseIterable {
-    case zh, en, ja, ko
+    case zh, zhHant = "zh-Hant", en, ja, ko
 
-    static let system: Lang = {
-        let code = Locale.preferredLanguages.first ?? "en"
-        if code.hasPrefix("zh") { return .zh }
-        if code.hasPrefix("ja") { return .ja }
-        if code.hasPrefix("ko") { return .ko }
+    static let system: Lang = from(Locale.preferredLanguages.first ?? "en")
+
+    /// zh-Hant-TW / zh-TW / zh-HK → 繁体；zh-Hans-* / zh-CN → 简体
+    static func from(_ code: String) -> Lang {
+        let c = code.lowercased()
+        if c.hasPrefix("zh") {
+            if c.contains("hans") { return .zh }
+            if c.contains("hant") || c.hasPrefix("zh-tw") || c.hasPrefix("zh-hk") || c.hasPrefix("zh-mo") { return .zhHant }
+            return .zh
+        }
+        if c.hasPrefix("ja") { return .ja }
+        if c.hasPrefix("ko") { return .ko }
         return .en
-    }()
+    }
 
     static var current: Lang {
         UserDefaults.standard.string(forKey: "language").flatMap(Lang.init(rawValue:)) ?? system
@@ -21,6 +29,7 @@ enum Lang: String, CaseIterable {
     var nativeName: String {
         switch self {
         case .zh: return "简体中文"
+        case .zhHant: return "繁體中文"
         case .en: return "English"
         case .ja: return "日本語"
         case .ko: return "한국어"
@@ -30,6 +39,7 @@ enum Lang: String, CaseIterable {
     var localeID: String {
         switch self {
         case .zh: return "zh_CN"
+        case .zhHant: return "zh_TW"
         case .en: return "en_US"
         case .ja: return "ja_JP"
         case .ko: return "ko_KR"
@@ -37,12 +47,17 @@ enum Lang: String, CaseIterable {
     }
 }
 
-var isChinese: Bool { Lang.current == .zh }
+/// 简体或繁体（两者共用中文的日期、时长写法）
+var isChinese: Bool { Lang.current == .zh || Lang.current == .zhHant }
 
-/// 多语言字符串。日语 / 韩语没给时用英文。
+/// 中文专用的拼接文字（不走 L() 的），繁体时转换
+func zhText(_ s: String) -> String { Lang.current == .zhHant ? ZhHant.convert(s) : s }
+
+/// 多语言字符串。日语 / 韩语没给时用英文；繁体由简体自动转换。
 func L(_ zh: String, _ en: String, ja: String? = nil, ko: String? = nil) -> String {
     switch Lang.current {
     case .zh: return zh
+    case .zhHant: return ZhHant.convert(zh)
     case .en: return en
     case .ja: return ja ?? en
     case .ko: return ko ?? en
@@ -115,7 +130,7 @@ enum Fmt {
                 monday.firstWeekday = 2
                 let week = monday.isDate(d, equalTo: now, toGranularity: .weekOfYear) ? "本周" : "下周"
                 let names = ["日", "一", "二", "三", "四", "五", "六"]
-                return week + names[calendar.component(.weekday, from: d) - 1] + " " + hm.string(from: d)
+                return zhText(week + names[calendar.component(.weekday, from: d) - 1]) + " " + hm.string(from: d)
             }
             return weekday.string(from: d) + " " + hm.string(from: d)
         }
@@ -147,14 +162,14 @@ enum Fmt {
             if days > 0 { return hours > 0 ? "\(days)일 \(hours)시간" : "\(days)일" }
             if hours > 0 { return minutes > 0 ? "\(hours)시간 \(minutes)분" : "\(hours)시간" }
             return minutes > 0 ? "\(minutes)분" : "1분 미만"
-        case .zh:
+        case .zh, .zhHant:
             break
         }
         // 面板窄，统一紧凑写法：「4天9小时」「1小时9分」「24分钟」
-        if days > 0 { return hours > 0 ? "\(days)天\(hours)小时" : "\(days)天" }
-        if hours > 0 { return minutes > 0 ? "\(hours)小时\(minutes)分" : "\(hours)小时" }
-        if minutes > 0 { return "\(minutes)分钟" }
-        return "不到1分钟"
+        if days > 0 { return zhText(hours > 0 ? "\(days)天\(hours)小时" : "\(days)天") }
+        if hours > 0 { return zhText(minutes > 0 ? "\(hours)小时\(minutes)分" : "\(hours)小时") }
+        if minutes > 0 { return zhText("\(minutes)分钟") }
+        return zhText("不到1分钟")
     }
 
     /// 和 duration 同一写法（以前两套写法不一致，已统一）

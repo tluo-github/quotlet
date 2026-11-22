@@ -108,6 +108,8 @@ final class Cloud: ObservableObject {
             URLQueryItem(name: "client", value: "mac"),
             URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "code_challenge", value: Self.challenge(for: verifier)),
+            // 登录网页、验证码邮件用 App 当前的界面语言
+            URLQueryItem(name: "lang", value: Lang.current.rawValue),
         ]
         NSWorkspace.shared.open(comps.url!)
     }
@@ -138,6 +140,7 @@ final class Cloud: ObservableObject {
                 "code": code,
                 "code_verifier": verifier,
                 "device": devObj,
+                "lang": Lang.current.rawValue,
             ]
             let (data, status) = try await Self.request("POST", "/api/auth/exchange", json: body, token: nil)
             guard status == 200,

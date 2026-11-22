@@ -33,7 +33,7 @@ quotlet/
 │   ├── HookEvents.swift / HookInstaller.swift # --hook 极速命令行分支、events.jsonl 监听与 hooks 安全装卸
 │   ├── CommandSecurity.swift / ProviderRunner.swift # 30 天目录白名单、终端冲突保护、统一三来源执行器与指令审计
 │   ├── CloudRealtime.swift       # /api/ws WebSocket 长连接、离线指令对账与远程指令调度器
-│   ├── Format.swift / Theme.swift# 多语言（zh/en/ja/ko）、时区/日期/模型名格式化与动态浅深色主题
+│   ├── Format.swift / Theme.swift# 多语言（zh/zh-Hant/en/ja/ko，繁体由 ZhHant 对照表自动转换，表用 scripts/gen-zh-hant.py 生成）、时区/日期/模型名格式化与动态浅深色主题
 │   ├── KeychainAccess.swift      # 钥匙串静默读取保护（禁止后台意外弹窗）
 │   ├── Demo.swift / Snapshot.swift / Showcase.swift # 演示脱敏模式与自动截图工具
 │   └── ProviderAssets/           # 品牌图标（claude.png / codex.png / gemini.png）
