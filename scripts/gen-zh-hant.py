@@ -3,7 +3,8 @@
 
 App 选繁体时，L() 拿简体文案按这张表转换（最长词优先，查不到的按单字转换）；
 官网 site/main.js 的繁体文案（'zh-Hant'）也由简体那份（zh）整块转换生成，
-README.zh-TW.md 由 README.zh-CN.md 转换生成。
+README.zh-TW.md 由 README.zh-CN.md 转换生成，
+网页后台的繁体对照表 cloud/web/static/zh-hant.js 只收网页后台自己的文案。
 新增或修改中文文案后重新跑一遍即可：
 
     uv run --with opencc python3 scripts/gen-zh-hant.py
@@ -27,7 +28,9 @@ SOURCES = [
     (ROOT / 'ios' / 'Quotlet', '*.swift'),
     (ROOT / 'android' / 'app' / 'src' / 'main' / 'java', '*.kt'),
 ]
-GENERATED = {'ZhHantData.swift', 'ZhHantData.kt'}
+GENERATED = {'ZhHantData.swift', 'ZhHantData.kt', 'zh-hant.js', 'i18n.js'}
+WEB_SOURCES = [(ROOT / 'cloud' / 'web' / 'static', '*.js'), (ROOT / 'cloud' / 'web' / 'static', '*.html')]
+OUT_WEB = ROOT / 'cloud/web/static/zh-hant.js'
 OUT_SWIFT = [ROOT / 'Sources/Quotlet/ZhHantData.swift', ROOT / 'ios/Quotlet/ZhHantData.swift']
 OUT_KOTLIN = ROOT / 'android/app/src/main/java/com/quotlet/ZhHantData.kt'
 SITE_JS = ROOT / 'site/main.js'
@@ -111,13 +114,22 @@ def make_converter():
     sys.exit('无法加载 OpenCC s2twp 配置')
 
 
-def collect_runs() -> set[str]:
+def collect_runs(sources=SOURCES, whole_file=False) -> set[str]:
+    """whole_file=True：整个文件里的中文都收（网页 JS 用单引号、反引号写字符串，按双引号提取会漏）"""
     runs: set[str] = set()
-    for base, pattern in SOURCES:
+    for base, pattern in sources:
         for path in sorted(base.rglob(pattern)):
             if path.name in GENERATED or '/build/' in str(path):
                 continue
-            for lit in STRING_RE.findall(path.read_text(encoding='utf-8')):
+            text = path.read_text(encoding='utf-8')
+            if whole_file:
+                # 同一行里常有 L('简体', 'English', '日本語', '한국어')：只去掉含假名、韩文的字符串，简体留下
+                any_lit = re.compile(r"(['\"`])(?:\\.|(?!\1).)*\1")
+                for line in text.split('\n'):
+                    line = any_lit.sub(lambda m: '' if KANA_HANGUL_RE.search(m.group(0)) else m.group(0), line)
+                    runs.update(RUN_RE.findall(line))
+                continue
+            for lit in STRING_RE.findall(text):
                 if KANA_HANGUL_RE.search(lit):
                     continue
                 runs.update(RUN_RE.findall(lit))
@@ -180,15 +192,14 @@ def update_readme(cc):
             lines.append(LANG_LINE)
             continue
         out = convert(cc, line).replace('“', '「').replace('”', '」')
-        out = re.sub(r'(docs/[a-z]+)-zh\.png', r'\1-zh-Hant.png', out)
+        out = re.sub(r'(docs/[a-z-]+?)-zh(-dark)?\.png', r'\1-zh-Hant\2.png', out)
         lines.append(out)
     header = '<!-- 自动生成，不要手改：改 README.zh-CN.md 后运行 uv run --with opencc python3 scripts/gen-zh-hant.py -->\n'
     README_HANT.write_text(header + '\n'.join(lines), encoding='utf-8')
 
 
-def main():
-    cc = make_converter()
-    runs = collect_runs()
+def build_table(cc, runs: set[str]) -> list[str]:
+    """单字 + 整段的对照，按长度排序，每行「简体\t繁体」"""
     chars = {ch for r in runs for ch in r}
     table: dict[str, str] = {}
     # 单字：词表里查不到时按字转换
@@ -203,7 +214,28 @@ def main():
         t = convert(cc, r)
         if t != r:
             table[r] = t
-    lines = [f'{k}\t{v}' for k, v in sorted(table.items(), key=lambda kv: (len(kv[0]), kv[0]))]
+    return [f'{k}\t{v}' for k, v in sorted(table.items(), key=lambda kv: (len(kv[0]), kv[0]))]
+
+
+def write_web(cc):
+    """网页后台用的对照表（只含网页后台的文案）"""
+    lines = build_table(cc, collect_runs(WEB_SOURCES, whole_file=True))
+    blob = '\n'.join(lines)
+    assert '`' not in blob and '${' not in blob and '\\' not in blob
+    OUT_WEB.write_text(
+        "'use strict'\n"
+        '// 自动生成，不要手改：uv run --with opencc python3 scripts/gen-zh-hant.py\n'
+        f'// 网页后台的简体 → 繁体（台湾）对照表，共 {len(lines)} 条，preferences.js 的 hant() 使用。\n'
+        f'const ZH_HANT_PAIRS = `{blob}`\n',
+        encoding='utf-8',
+    )
+    return len(lines)
+
+
+def main():
+    cc = make_converter()
+    runs = collect_runs()
+    lines = build_table(cc, runs)
     blob = '\n'.join(lines)
     assert '"""' not in blob and '$' not in blob and '\\' not in blob
 
@@ -219,7 +251,8 @@ def main():
     OUT_KOTLIN.write_text(kotlin, encoding='utf-8')
     update_site(cc)
     update_readme(cc)
-    print(f'{len(runs)} 段中文，{len(lines)} 条对照，已写入 {len(OUT_SWIFT) + 1} 个文件，并更新 site/main.js 和 README.zh-TW.md')
+    web_count = write_web(cc)
+    print(f'{len(runs)} 段中文，{len(lines)} 条对照，已写入 {len(OUT_SWIFT) + 1} 个文件，网页后台 {web_count} 条，并更新 site/main.js 和 README.zh-TW.md')
 
 
 if __name__ == '__main__':
