@@ -34,7 +34,7 @@ const T = {
     'f4.k': 'Estimates', 'f4.t': 'Updates between refreshes', 'f4.d': "After calibration, new local tokens update Claude quota estimates in the panel and menu bar. The ≈ mark stays until the next API reading corrects the value.",
     'f5.k': 'History', 'f5.t': 'A usage history window', 'f5.d': "Use Sessions and Stats in the panel for recent activity. Open History for stacked Claude, Codex and Gemini charts, project trends, models, daily totals and CSV export. Daily totals stay on your Mac after old logs are cleared.",
     'f6.k': 'Alerts', 'f6.t': 'Notifications, five languages', 'f6.d': "90%, 100% and reset alerts default to on for Claude, Codex and Gemini, including Claude estimates. Choose 80%, 90% or 95% for the early alert. Requires macOS notification permission.",
-    'shots.usage': 'Panel', 'shots.sessions': 'Sessions', 'shots.stats': 'Stats', 'shots.settings': 'Settings',
+    'tab.usage': 'Quotas', 'shots.usage': 'Panel', 'shots.sessions': 'Sessions', 'shots.stats': 'Stats', 'shots.settings': 'Settings',
     'cloud.label': 'Quotlet Cloud', 'cloud.soon': "Optional sync",
     'cloud.title': 'The menu bar stays small. The details live on the web.',
     'cloud.lead': 'Sign in on your Mac, then check everything at app.quotlet.com or in the iPhone app: limits from every Mac, which sessions are running or waiting for you, token trends, and remote commands.',
@@ -77,7 +77,7 @@ const T = {
     'install.dmg.arm64': 'Apple 芯片 (.dmg)', 'install.dmg.intel': 'Intel 芯片 (.dmg)',
     'hero.label': 'macOS 状态栏 · 免费开源',
     'hero.title': '额度还剩多少，<em>一眼就知道。</em>',
-    'hero.lead': "Quotlet 在 Mac 状态栏同时盯着 Claude、Codex 和 Gemini 的额度、实时速度（tok/s）和重置时间。哪家快用完了，提前提醒你，并建议换到还有余量的那家接着干。",
+    'hero.lead': "Quotlet 在 Mac 状态栏同时盯着 Claude、Codex 和 Gemini 的额度、实时速度（tok/s）和重置时间。哪家快用完了，提前提醒你，并建议换到还有余量的那家接着用。",
     'stat.providers': '家 AI 一起看', 'stat.refresh': '本机刷新', 'stat.langs': '种界面语言', 'stat.license': '开源许可',
     'hero.meta': 'macOS 13+ · Apple 芯片和 Intel · 已签名和公证',
     'highlight.speed': '实时吞吐与即时估算',
@@ -100,7 +100,7 @@ const T = {
     'f4.k': "估算", 'f4.t': "刷新间隔内继续更新", 'f4.d': "校准后根据本机新增 token 推算 Claude 额度，面板和状态栏用 ≈ 标记，下一次接口读数到达后自动校正。",
     'f5.k': '历史', 'f5.t': '用量历史窗口', 'f5.d': "面板内的会话和统计页查看近期活动，历史窗口支持三家堆叠柱状图、项目趋势、模型占比、每日汇总和 CSV 导出。旧日志清理后，每日汇总保留在本机。",
     'f6.k': '提醒', 'f6.t': '通知和五种语言', 'f6.d': "Claude、Codex 和 Gemini 默认开启 90%、100% 和重置恢复提醒，Claude 估算值也参与提醒。提前提醒可选 80%、90% 或 95%，需允许 macOS 通知。",
-    'shots.usage': '面板', 'shots.sessions': '会话', 'shots.stats': '统计', 'shots.settings': '设置',
+    'tab.usage': '额度', 'shots.usage': '面板', 'shots.sessions': '会话', 'shots.stats': '统计', 'shots.settings': '设置',
     'cloud.label': 'Quotlet Cloud', 'cloud.soon': "可选同步",
     'cloud.title': '状态栏保持小巧，详细的放到网页上。',
     'cloud.lead': '在 Mac 上登录后，打开 app.quotlet.com 或 iPhone App 就能看全貌：每台 Mac 的额度、哪些会话在执行或等你处理、token 趋势，还能远程下发指令。',
@@ -143,8 +143,8 @@ const T = {
     'install.dmg.arm64': 'Apple 晶片 (.dmg)', 'install.dmg.intel': 'Intel 晶片 (.dmg)',
     'hero.label': 'macOS 選單列 · 免費開源',
     'hero.title': '額度還剩多少，<em>一眼就知道。</em>',
-    'hero.lead': "Quotlet 在 Mac 選單列同時盯著 Claude、Codex 和 Gemini 的額度、即時速度（tok/s）與重置時間。哪家快用完了，提前提醒你，並建議換到還有餘量的那家接著做。",
-    'stat.providers': '家 AI 一起看', 'stat.refresh': '本機更新', 'stat.langs': '種介面語言', 'stat.license': '開源授權',
+    'hero.lead': "Quotlet 在 Mac 選單列同時盯著 Claude、Codex 和 Gemini 的額度、即時速度（tok/s）和重置時間。哪家快用完了，提前提醒你，並建議換到還有餘量的那家接著用。",
+    'stat.providers': '家 AI 一起看', 'stat.refresh': '本機重新整理', 'stat.langs': '種介面語言', 'stat.license': '開源許可',
     'hero.meta': 'macOS 13+ · Apple 晶片和 Intel · 已簽署和公證',
     'highlight.speed': '即時吞吐與即時估算',
     'highlight.pace': "每秒重新整理全部本機 AI 的輸出速度（tok/s），並在 Claude API 重新整理間隔內按本機 token 估算額度。",
@@ -166,7 +166,7 @@ const T = {
     'f4.k': "估算", 'f4.t': "重新整理間隔內繼續更新", 'f4.d': "校準後根據本機新增 token 推算 Claude 額度，面板和選單列用 ≈ 標記，下一次 API 讀數到達後自動校正。",
     'f5.k': '歷史', 'f5.t': '用量歷史視窗', 'f5.d': "面板內的工作階段和統計頁檢視近期活動，歷史視窗支援三家堆疊長條圖、專案趨勢、模型佔比、每日彙總和 CSV 匯出。舊日誌清理後，每日彙總保留在本機。",
     'f6.k': '提醒', 'f6.t': '通知和五種語言', 'f6.d': "Claude、Codex 和 Gemini 預設開啟 90%、100% 和重置恢復提醒，Claude 估算值也參與提醒。提前提醒可選 80%、90% 或 95%，需允許 macOS 通知。",
-    'shots.usage': '面板', 'shots.sessions': '工作階段', 'shots.stats': '統計', 'shots.settings': '設定',
+    'tab.usage': '額度', 'shots.usage': '面板', 'shots.sessions': '工作階段', 'shots.stats': '統計', 'shots.settings': '設定',
     'cloud.label': 'Quotlet Cloud', 'cloud.soon': "可選同步",
     'cloud.title': '選單列保持小巧，詳細的放到網頁上。',
     'cloud.lead': '在 Mac 上登入後，開啟 app.quotlet.com 或 iPhone App 就能看全貌：每台 Mac 的額度、哪些工作階段在執行或等你處理、token 趨勢，還能遠端下發指令。',
@@ -232,7 +232,7 @@ const T = {
     'f4.k': "推定", 'f4.t': "更新間隔も使用量を追跡", 'f4.d': "校正後は新しいローカルトークンから Claude 使用枠を推定します。パネルとメニューバーに ≈ を付け、次の API 応答で補正します。",
     'f5.k': '履歴', 'f5.t': '使用量の履歴ウィンドウ', 'f5.d': "パネルのセッションと統計で最近の活動を確認。履歴ウィンドウでは 3 サービス積み上げグラフ、プロジェクト推移、モデル別割合、日ごとの合計と CSV 書き出しを利用できます。古いログの削除後も日ごとの合計は Mac に残ります。",
     'f6.k': '通知', 'f6.t': '通知と 5 言語', 'f6.d': "Claude・Codex・Gemini の 90%、100%、リセット後の通知は既定でオン。Claude の推定値も対象です。早期通知は 80・90・95% から選択でき、macOS の通知許可が必要です。",
-    'shots.usage': 'パネル', 'shots.sessions': 'セッション', 'shots.stats': '統計', 'shots.settings': '設定',
+    'tab.usage': '使用枠', 'shots.usage': 'パネル', 'shots.sessions': 'セッション', 'shots.stats': '統計', 'shots.settings': '設定',
     'cloud.label': 'Quotlet Cloud', 'cloud.soon': "任意の同期",
     'cloud.title': 'メニューバーは小さいまま。詳しくは Web で。',
     'cloud.lead': 'Mac でログインすると、app.quotlet.com や iPhone アプリで全体を確認できます。Mac ごとの使用枠、実行中や対応待ちのセッション、トークンの推移、そしてリモートコマンドまで。',
@@ -298,7 +298,7 @@ const T = {
     'f4.k': "추정", 'f4.t': "새로 고침 사이에도 갱신", 'f4.d': "보정 후 새 로컬 토큰으로 Claude 한도를 추정합니다. 패널과 메뉴 막대에 ≈를 표시하고 다음 API 응답으로 보정합니다.",
     'f5.k': '기록', 'f5.t': '사용량 기록 창', 'f5.d': "패널의 세션과 통계에서 최근 활동을 확인하고, 기록 창에서 Claude·Codex·Gemini 누적 차트, 프로젝트 추이, 모델 비중, 일별 합계와 CSV 내보내기를 사용하세요. 오래된 로그를 지워도 일별 합계는 Mac에 보관됩니다.",
     'f6.k': '알림', 'f6.t': '알림과 5개 언어', 'f6.d': "Claude, Codex, Gemini의 90%, 100%, 재설정 알림은 기본으로 켜져 있으며 Claude 추정값도 포함됩니다. 사전 알림은 80·90·95%에서 고를 수 있고 macOS 알림 권한이 필요합니다.",
-    'shots.usage': '패널', 'shots.sessions': '세션', 'shots.stats': '통계', 'shots.settings': '설정',
+    'tab.usage': '한도', 'shots.usage': '패널', 'shots.sessions': '세션', 'shots.stats': '통계', 'shots.settings': '설정',
     'cloud.label': 'Quotlet Cloud', 'cloud.soon': "선택적 동기화",
     'cloud.title': '메뉴 막대는 작게. 자세한 내용은 웹에서.',
     'cloud.lead': 'Mac에서 로그인하면 app.quotlet.com이나 iPhone 앱에서 전체를 확인할 수 있습니다. Mac별 한도, 실행 중이거나 응답을 기다리는 세션, 토큰 추이, 그리고 원격 명령까지.',
@@ -383,6 +383,7 @@ function apply(lang) {
   document.querySelectorAll('[data-i18n]').forEach((el) => { const v = t[el.dataset.i18n]; if (v) el.textContent = v })
   // 标题里只有 <em>，文案是自己写的常量
   document.querySelectorAll('[data-i18n-html]').forEach((el) => { const v = t[el.dataset.i18nHtml]; if (v) el.innerHTML = v })
+  document.querySelectorAll('[data-i18n-label]').forEach((el) => { const v = t[el.dataset.i18nLabel]; if (v) el.setAttribute('aria-label', v) })
   document.querySelectorAll('[data-shot]').forEach((img) => {
     img.alt = t['shots.' + img.dataset.shot] || t['shots.usage']
   })
@@ -418,6 +419,22 @@ document.getElementById('lang').addEventListener('change', (e) => {
   lang = e.target.value
   try { localStorage.setItem('lang', lang) } catch {}
   apply(lang)
+})
+
+// 首屏截图切换：额度 / 会话 / 统计，图片跟随语言和主题
+const heroShot = document.querySelector('.preview img')
+document.querySelectorAll('.shot-tabs button').forEach((b) => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.shot-tabs button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)))
+    heroShot.dataset.shot = b.dataset.tab
+    heroShot.alt = T[lang]['shots.' + b.dataset.tab] || T[lang]['shots.usage']
+    updateThemeColor()
+  })
+})
+// 首屏加载完后预取另外两页，切换时不闪
+addEventListener('load', () => {
+  const dark = document.documentElement.dataset.theme === 'dark' || (!document.documentElement.dataset.theme && systemDark.matches)
+  for (const page of ['sessions', 'stats']) new Image().src = `/assets/${page}-${lang}-${dark ? 'dark' : 'light'}.webp`
 })
 
 // 按当前语言复制安装命令或 AI 提示词

@@ -6,8 +6,6 @@
 
 [English](README.md) | 简体中文 | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
-> **Quotlet 在 0.4.1 及之前叫 Quotabar。** 那些版本的文件名还是 `Quotabar.app` / `Quotabar-<版本>.dmg`。GitHub 仓库从 `tluo-github/quotabar` 改名为 `tluo-github/quotlet`，旧链接会自动跳转。
-
 Quotlet 默认从本机日志与本地服务统计 **Claude Code**、**Codex** 和 **Antigravity（Gemini）** 的 token、会话、实时输出吞吐（tok/s）和 API 等值费用，不需要读取登录凭证。Codex 额度来自本机日志，Gemini 额度来自本机 `127.0.0.1` 的 Antigravity 本地服务并支持离线缓存；在设置中主动开启 Claude 额度接口后，才会查询和 `/usage` 一样的 5 小时、每周额度及重置时间。点「历史」可查看详细趋势。
 
 <p>

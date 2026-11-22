@@ -35,7 +35,7 @@ for lang in en zh zh-Hant ja ko; do
     cwebp -quiet -q 82 -resize 720 0 "docs/${page}-${lang}.png" -o "$OUT/assets/${page}-${lang}.webp"
   done
   cwebp -quiet -q 82 -resize 1440 0 "docs/history-${lang}.png" -o "$OUT/assets/history-${lang}.webp"
-  for page in panel usage settings history; do
+  for page in panel sessions stats usage settings history; do
     width=720; [[ $page != history ]] || width=1440
     for mode in light dark; do
       source="docs/${page}-${lang}.png"

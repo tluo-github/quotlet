@@ -121,8 +121,8 @@ nav > a:hover { color: var(--fg); }
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
   gap: clamp(3rem, 6vw, 5rem);
-  align-items: center;
-  padding: clamp(2rem, 4vw, 3.5rem) 0 clamp(3rem, 5vw, 4.5rem);
+  align-items: start;
+  padding: clamp(1.5rem, 3vw, 2.5rem) 0 clamp(3rem, 5vw, 4.5rem);
 }
 h1 {
   max-width: 22ch;
@@ -178,13 +178,26 @@ h1 em { display: block; color: var(--accent); font-style: normal; }
   width: auto;
   max-width: 100%;
   height: auto;
-  max-height: 660px;
+  max-height: 640px;
   margin: 0 auto;
   border: 1px solid var(--line);
   border-radius: 12px;
   box-shadow: 0 24px 64px var(--shadow);
 }
-.preview figcaption { margin-top: 1.1rem; text-align: center; color: var(--sub); font: 400 12.5px/1.6 var(--mono); }
+.shot-tabs { display: flex; justify-content: center; gap: 0.3rem; margin-top: 1.1rem; }
+.shot-tabs button {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sub);
+  font: 500 13px/1.5 var(--sans);
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+}
+.shot-tabs button:hover { color: var(--fg); }
+.shot-tabs button[aria-pressed="true"] { border-color: var(--line); background: var(--card); color: var(--fg); }
+.preview figcaption { margin-top: 0.6rem; text-align: center; color: var(--sub); font: 400 12.5px/1.6 var(--mono); }
 
 .highlights {
   display: grid;

@@ -6,8 +6,6 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | 한국어
 
-> **Quotlet은 0.4.1까지 Quotabar라는 이름이었습니다.** 해당 버전의 파일 이름은 `Quotabar.app` / `Quotabar-<버전>.dmg` 그대로입니다. GitHub 저장소는 `tluo-github/quotabar`에서 `tluo-github/quotlet`으로 바뀌었고, 예전 링크는 자동으로 연결됩니다.
-
 Quotlet는 **Claude Code**, **Codex**, **Antigravity(Gemini)**의 토큰, 세션, 실시간 출력 속도(tok/s), API 환산 비용을 기본으로 로컬 로그와 로컬 서비스에서 집계합니다. Codex 한도는 로컬 로그에서, Gemini 한도는 `127.0.0.1`의 Antigravity 로컬 서비스에서 조회(오프라인 캐시 지원)하며, 설정에서 Claude 한도 API를 켜면 `/usage`와 같은 5시간·주간 한도도 조회합니다. **기록**을 클릭하면 자세한 추이를 볼 수 있습니다.
 
 <p>

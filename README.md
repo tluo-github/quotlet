@@ -6,8 +6,6 @@
 
 English | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md) | [한국어](README.ko.md)
 
-> **Quotlet was called Quotabar up to version 0.4.1.** Those releases are still named `Quotabar.app` / `Quotabar-<version>.dmg`. The GitHub repo moved from `tluo-github/quotabar` to `tluo-github/quotlet`; old links redirect.
-
 Quotlet tracks **Claude Code**, **Codex** and **Antigravity (Gemini)** tokens, sessions, real-time output throughput (`tok/s`) and API-equivalent cost right from your Mac menu bar — without reading login credentials by default. Codex quotas come from local logs, Gemini quotas from Antigravity's local service (`127.0.0.1`), and optional Claude quota lookup in Settings fetches the same 5-hour and weekly limits as `/usage`. Click **History** for detailed trends.
 
 <p>
