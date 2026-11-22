@@ -108,8 +108,12 @@ Development helpers:
 ```bash
 # Render the panel, settings and history (light and dark) to PNG without touching the menu bar
 .build/release/Quotlet --snapshot /tmp/qb -language ja -stage YES -demo YES -scale 3
-# Regenerate the README and website screenshots for all four languages
+# Regenerate the README and website screenshots for all five languages
+# (LANGS="zh-Hant" renders just one language, OFFLINE=1 uses cached usage only)
 scripts/make-screenshots.sh
+# After editing Simplified Chinese text, regenerate Traditional Chinese for the apps,
+# the website and README.zh-TW.md (OpenCC s2twp + Taiwan product terms)
+uv run --with opencc python3 scripts/gen-zh-hant.py
 # Open the usage history window right after launch
 build/Quotlet.app/Contents/MacOS/Quotlet -openHistory YES -demo YES
 # A window with the real panel on a clean background, for recording demos
@@ -133,6 +137,7 @@ swift scripts/make-icon.swift
 | `Views.swift`, `QuickUsage.swift`, `History.swift`, `HistoryStore.swift` | Panel, Sessions/Stats tabs, History window and local archive |
 | `Cloud.swift`, `CloudSync.swift` | Optional GitHub OAuth sign-in and incremental sync to `app.quotlet.com` |
 | `Theme.swift`, `Format.swift`, `Notifier.swift` | Dynamic theme, 5 languages, formatting and quota notifications |
+| `ZhHant.swift`, `ZhHantData.swift`, `scripts/gen-zh-hant.py` | Traditional Chinese: converts Simplified text with a generated lookup table (also used by iOS / Android) |
 | `Snapshot.swift`, `Showcase.swift`, `Demo.swift` | Offscreen screenshot, demo-window and sample-data helpers |
 | `Casks/quotlet.rb` | Homebrew cask |
 | `docs/architecture.md`, `docs/cloud-design.md` | System architecture and Cloud design documentation |
