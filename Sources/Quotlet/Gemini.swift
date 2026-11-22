@@ -3,7 +3,7 @@ import SQLite3
 
 // 读 Antigravity（Gemini）写在本机的状态与日志：
 // 1. 额度与套餐：通过本地语言服务器（language_server）暴露的 ConnectRPC 接口查询，
-//    守护配置保存在 ~/.gemini/antigravity/daemon/hub_*.json。
+//    探测 ~/.gemini/antigravity/daemon 与 ~/.gemini/antigravity-cli/daemon 的 hub_*.json。
 // 2. 会话与 Token：同时扫描 Antigravity IDE（~/.gemini/antigravity/）与
 //    Antigravity CLI（agy，~/.gemini/antigravity-cli/）下的
 //    brain/<id>/.system_generated/logs/transcript.jsonl，
@@ -271,9 +271,11 @@ enum GeminiAPI {
     private static var lastFetchedLimits: GeminiLimits?
     private static let minFetchInterval: TimeInterval = 15
 
-    static func activeHub() -> HubInfo? {
-        let daemonDir = GeminiLogs.home.appendingPathComponent("antigravity/daemon")
-        guard let files = try? FileManager.default.contentsOfDirectory(at: daemonDir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return nil }
+    static func activeHub(in home: URL = GeminiLogs.home) -> HubInfo? {
+        let files = GeminiLogs.appDataDirNames.flatMap { name in
+            (try? FileManager.default.contentsOfDirectory(at: home.appendingPathComponent("\(name)/daemon"),
+                                                         includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        }
         let jsonFiles = files.filter { $0.pathExtension == "json" && $0.lastPathComponent.hasPrefix("hub_") }
         let sorted = jsonFiles.sorted {
             let d1 = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date.distantPast
@@ -384,6 +386,7 @@ struct GeminiFile {
     var isCLI = false
     var cwd: String?
     var start: Date?
+    var lastActivityAt: Date?
     var model: String?
     var firstPrompt: String?
     var messages: [MessageUsage] = []
@@ -419,8 +422,8 @@ enum GeminiLogs {
             paths.append(base.appendingPathComponent("brain"))
             paths.append(base.appendingPathComponent("conversation_summaries.db"))
             paths.append(base.appendingPathComponent("conversation_summaries.db-wal"))
+            paths.append(base.appendingPathComponent("daemon"))
         }
-        paths.append(home.appendingPathComponent("antigravity/daemon"))
         return paths
     }
 
@@ -583,6 +586,7 @@ enum GeminiLogs {
                 }
                 pendingPlanner = nil
                 if f.start == nil { f.start = ts }
+                f.lastActivityAt = ts
                 let model = d["model"] as? String ?? f.model ?? "gemini"
                 f.model = model
                 activity.model = model
@@ -602,6 +606,8 @@ enum GeminiLogs {
                 // 用户输入前的等待包含人工阅读时间，不计入上一条回复的生成耗时
                 pendingPlanner = nil
                 if let ts = quickCreatedAt(p, len) {
+                    if f.start == nil { f.start = ts }
+                    f.lastActivityAt = ts
                     activity.update(.generating, at: ts)
                 }
                 if f.firstPrompt == nil, let d = json(p, len), let msg = d["content"] as? String, !msg.isEmpty {
@@ -611,6 +617,7 @@ enum GeminiLogs {
             } else {
                 // GENERIC（工具执行）/ ERROR_MESSAGE / SYSTEM_MESSAGE 等步骤的 created_at 可结算上一条 PLANNER_RESPONSE 的结束时间
                 if let ts = quickCreatedAt(p, len) {
+                    f.lastActivityAt = ts
                     if let prev = pendingPlanner, prev.hasToolCalls {
                         if let dur = SessionScanner.sane(ts.timeIntervalSince(prev.start)) {
                             f.messages[prev.index].ts = ts
@@ -649,16 +656,18 @@ enum GeminiLogs {
 
         for f in files {
             let msgs = f.messages.filter { $0.ts >= cutoff }
-            guard !msgs.isEmpty else { continue }
+            // CLI 刚发出请求、失败或响应尚未包含 token 时，也要保留可见的会话。
+            guard let start = f.start ?? msgs.first?.ts,
+                  let end = f.lastActivityAt ?? msgs.last?.ts, end >= cutoff else { continue }
             let meta = metas[f.id]
-            let project = meta?.project ?? "Antigravity"
+            let project = meta?.project ?? (f.isCLI ? "Antigravity CLI" : "Antigravity")
             var tokens = TokenCount()
             var byModel: [String: Int] = [:]
             for m in msgs {
                 tokens += m.tokens
                 byModel[m.model, default: 0] += m.tokens.output + m.tokens.input
             }
-            messages.append(contentsOf: msgs.map { var m = $0; m.project = project; return m })
+            messages.append(contentsOf: msgs.map { var m = $0; m.project = project; m.sessionId = "gemini-" + f.id; return m })
 
             var title = (meta?.title.isEmpty == false ? meta?.title : nil) ?? f.firstPrompt ?? L("（无标题）", "(untitled)", ja: "（無題）", ko: "(제목 없음)")
             title = title.replacingOccurrences(of: "\n", with: " ")
@@ -670,8 +679,8 @@ enum GeminiLogs {
                 project: project,
                 cwd: meta?.cwd ?? f.cwd,
                 title: title,
-                start: f.start ?? msgs.first!.ts,
-                end: msgs.last!.ts,
+                start: start,
+                end: end,
                 tokens: tokens,
                 subagentTokens: 0,
                 requests: msgs.count,

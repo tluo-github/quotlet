@@ -41,6 +41,8 @@ struct MessageUsage {
     var duration: TimeInterval? = nil
 
     var isFinal = true
+    /// 云端跨设备去重使用，不上传提示词或代码。
+    var sessionId: String? = nil
 
     /// 算速度用的 (输出 token, 耗时)。输出太少的回复（十几个 token 却等了很久）主要是在读上下文，不计入速度。
     var timed: (output: Int, seconds: TimeInterval)? {
@@ -91,6 +93,8 @@ struct LocalSnapshot {
     var codexLimits: CodexLimits? = nil
     /// Antigravity（Gemini）本地语言服务器或缓存记录的额度
     var geminiLimits: GeminiLimits? = nil
+    /// 独立探测 agy，不依赖 Antigravity App、额度接口或云登录。
+    var antigravityCLIPath: String? = nil
 
     var liveActivities: [LiveActivity] = []
 
@@ -102,12 +106,16 @@ struct LocalSnapshot {
                       messages: messages.filter { $0.source == source },
                       codexLimits: source == .codex ? codexLimits : nil,
                       geminiLimits: source == .gemini ? geminiLimits : nil,
+                      antigravityCLIPath: source == .gemini ? antigravityCLIPath : nil,
                       liveActivities: liveActivities.filter { $0.source == source })
     }
 
     var hasClaude: Bool { messages.contains { $0.source == .claude } }
     var hasCodex: Bool { codexLimits != nil || messages.contains { $0.source == .codex } }
-    var hasGemini: Bool { geminiLimits != nil || messages.contains { $0.source == .gemini } }
+    var hasAntigravityCLI: Bool {
+        antigravityCLIPath != nil || sessions.contains { $0.source == .gemini && $0.isAntigravityCLI }
+    }
+    var hasGemini: Bool { hasAntigravityCLI || geminiLimits != nil || sessions.contains { $0.source == .gemini } || messages.contains { $0.source == .gemini } }
 
     func tokens(since: Date) -> (tokens: TokenCount, requests: Int) {
         var t = TokenCount(), n = 0
@@ -178,6 +186,7 @@ actor SessionScanner {
         sessions.sort { $0.end > $1.end }
         messages.sort { $0.ts < $1.ts }
         return LocalSnapshot(sessions: sessions, messages: messages, codexLimits: codex.limits, geminiLimits: gemini.limits,
+                             antigravityCLIPath: CLICapabilityProber.findExecutable(named: "agy"),
                              liveActivities: claude.liveActivities + codex.activities + gemini.activities)
     }
 
@@ -292,7 +301,7 @@ actor SessionScanner {
                 guard let cwd else { return L("未知目录", "Unknown folder", ja: "不明なフォルダ", ko: "알 수 없는 폴더") }
                 return cwd == home ? "~" : (cwd as NSString).lastPathComponent
             }()
-            messages.append(contentsOf: msgs.map { var m = $0; m.project = project; return m })
+            messages.append(contentsOf: msgs.map { var m = $0; m.project = project; m.sessionId = sid; return m })
             var title = main?.customTitle ?? main?.aiTitle ?? main?.lastPrompt ?? L("（无标题）", "(untitled)", ja: "（無題）", ko: "(제목 없음)")
             title = title.replacingOccurrences(of: "\n", with: " ")
             if title.count > 60 { title = String(title.prefix(60)) + "…" }

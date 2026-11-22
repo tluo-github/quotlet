@@ -3,6 +3,71 @@ import XCTest
 @testable import Quotlet
 
 final class GeminiTests: XCTestCase {
+    func testCLIOnlyInstallationAndSessionsWithoutIDEOrQuota() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("agy-only-\(UUID().uuidString)")
+        let bin = root.appendingPathComponent(".local/bin")
+        let home = root.appendingPathComponent(".gemini")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let agy = bin.appendingPathComponent("agy")
+        try Data("#!/bin/sh\n".utf8).write(to: agy)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: agy.path)
+        let path = CLICapabilityProber.findExecutable(named: "agy", searchDirectories:
+            CLICapabilityProber.defaultSearchDirectories(home: root.path, envPath: ""))
+        XCTAssertEqual(path, agy.path)
+        let installed = LocalSnapshot(sessions: [], messages: [], antigravityCLIPath: path)
+        XCTAssertTrue(installed.hasAntigravityCLI)
+        XCTAssertTrue(installed.hasGemini)
+        XCTAssertNil(installed.geminiLimits)
+        XCTAssertFalse(installed.only(.claude).hasAntigravityCLI)
+
+        func write(_ id: String, _ text: String) throws {
+            let dir = home.appendingPathComponent("antigravity-cli/brain/\(id)/.system_generated/logs")
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try text.write(to: dir.appendingPathComponent("transcript.jsonl"), atomically: true, encoding: .utf8)
+        }
+        try write("complete", """
+        {"type":"USER_INPUT","created_at":"2026-11-22T09:00:00Z","content":"CLI only"}
+        {"type":"PLANNER_RESPONSE","created_at":"2026-11-22T09:00:05Z","model":"gemini-4-neon-high","input_tokens":1500,"output_tokens":120,"cache_read_tokens":200}
+        """)
+        try write("pending", """
+        {"type":"USER_INPUT","created_at":"2026-11-22T09:01:00Z","content":"Waiting for a response"}
+        """)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: home.appendingPathComponent("antigravity").path))
+        XCTAssertNil(GeminiAPI.activeHub(in: home))
+        let files = GeminiLogs.files(modifiedAfter: .distantPast, in: home)
+        XCTAssertEqual(files.count, 2)
+        XCTAssertTrue(files.allSatisfy(\.isCLI))
+        let parsed = files.map { GeminiLogs.parse(url: $0.url, id: $0.id, isCLI: $0.isCLI) }
+        let built = GeminiLogs.build(parsed, metas: GeminiLogs.conversationMetas(in: home), cutoff: .distantPast, limits: nil)
+        XCTAssertEqual(built.sessions.count, 2)
+        XCTAssertEqual(built.messages.count, 1)
+        XCTAssertEqual(built.messages.first?.tokens.total, 1820)
+        XCTAssertTrue(built.sessions.allSatisfy { $0.sourceLabel == "Antigravity CLI" })
+        let pending = try XCTUnwrap(built.sessions.first { $0.id == "gemini-pending" })
+        XCTAssertEqual(pending.title, "Waiting for a response")
+        XCTAssertEqual(pending.requests, 0)
+        XCTAssertEqual(pending.tokens.total, 0)
+        XCTAssertTrue(LocalSnapshot(sessions: built.sessions, messages: built.messages).hasAntigravityCLI)
+        XCTAssertTrue(GeminiLogs.build(parsed, metas: [:], cutoff: Date(timeIntervalSince1970: 1_800_000_000), limits: nil).sessions.isEmpty)
+    }
+
+    func testDiscoversCLIHubWithoutIDEDirectory() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("agy-hub-\(UUID().uuidString)")
+        let daemon = home.appendingPathComponent("antigravity-cli/daemon")
+        try FileManager.default.createDirectory(at: daemon, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        let data = try JSONSerialization.data(withJSONObject: [
+            "pid": Int(ProcessInfo.processInfo.processIdentifier), "httpsPort": 4321,
+            "httpPort": 4322, "csrfToken": "fixture-token", "lsVersion": "test",
+        ])
+        try data.write(to: daemon.appendingPathComponent("hub_test.json"))
+        let hub = try XCTUnwrap(GeminiAPI.activeHub(in: home))
+        XCTAssertEqual(hub.httpsPort, 4321)
+        XCTAssertEqual(hub.httpPort, 4322)
+        XCTAssertEqual(hub.csrfToken, "fixture-token")
+    }
+
     func testGeminiProQuotaParsingOrderingAndWindows() throws {
         let now = Date(timeIntervalSince1970: 1_795_149_600) // 2026-11-20T04:40:00Z
         let jsonString = """

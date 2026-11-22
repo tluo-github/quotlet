@@ -300,7 +300,10 @@ struct UsageTab: View {
                 AdviceCard(advice: advice)
             }
 
-            if !store.hasClaudeQuotaSource {
+            if let u = claudeUsage, let shared = store.sharedClaude {
+                ProviderGroup(name: "Claude", plan: u.plan.map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() },
+                              source: .claude, limits: u.limits, now: now, sharedFrom: shared)
+            } else if !store.hasClaudeQuotaSource {
                 HStack(spacing: 8) {
                     Image(systemName: "doc.text.magnifyingglass").foregroundStyle(Theme.text2)
                     Text(L("本地统计模式", "Local stats mode", ja: "ローカル集計モード", ko: "로컬 통계 모드")).font(Theme.bodyMedium)
@@ -321,9 +324,9 @@ struct UsageTab: View {
                     .font(Theme.caption).foregroundStyle(Theme.text2)
             }
 
-            if !codex.isEmpty, let c = store.local?.codexLimits {
+            if !codex.isEmpty {
                 if !claude.isEmpty { Hairline() }
-                ProviderGroup(name: "Codex", plan: c.planTitle, source: .codex, limits: codex, now: now)
+                ProviderGroup(name: "Codex", plan: store.codexPlan, source: .codex, limits: codex, now: now, sharedFrom: store.sharedCodex)
             } else if store.menuBarSource == .codex {
                 Text(L("还没有 Codex 额度记录。使用一次 Codex 后会自动更新。",
                        "No Codex quota recorded yet. It updates after you use Codex.",
@@ -332,15 +335,20 @@ struct UsageTab: View {
                     .font(Theme.caption).foregroundStyle(Theme.text2)
             }
 
-            if !gemini.isEmpty, let g = store.local?.geminiLimits {
+            if !gemini.isEmpty {
                 if !claude.isEmpty || !codex.isEmpty { Hairline() }
-                ProviderGroup(name: "Gemini", plan: g.planTitle, source: .gemini, limits: gemini, now: now)
-            } else if store.menuBarSource == .gemini {
+                ProviderGroup(name: "Gemini", plan: store.geminiPlan, source: .gemini, limits: gemini, now: now, sharedFrom: store.sharedGemini)
+            } else if store.menuBarSource == .gemini, store.local?.hasAntigravityCLI != true {
                 Text(L("还没有 Gemini 额度记录。打开 Antigravity 后会自动更新。",
                        "No Gemini quota recorded yet. It updates when Antigravity is open.",
                        ja: "Gemini の使用枠は未記録です。Antigravity を開くと自動更新されます。",
                        ko: "아직 Gemini 한도 기록이 없습니다. Antigravity를 열면 자동으로 업데이트됩니다."))
                     .font(Theme.caption).foregroundStyle(Theme.text2)
+            }
+
+            if let local = store.local, local.hasAntigravityCLI {
+                Hairline()
+                AntigravityCLIBlock(local: local, hasQuota: !gemini.isEmpty)
             }
 
             if let local = store.local {
@@ -354,6 +362,52 @@ struct UsageTab: View {
     }
 }
 
+/// CLI 的安装与本地使用记录独立于 Gemini 额度，可在没有 IDE 的 Mac 上展示。
+private struct AntigravityCLIBlock: View {
+    let local: LocalSnapshot
+    /// 本机或其他 Mac 已有 Gemini 额度可显示
+    let hasQuota: Bool
+
+    var body: some View {
+        let sessions = local.sessions.filter { $0.source == .gemini && $0.isAntigravityCLI }
+        let latestModel = sessions.filter { $0.mainModel != "gemini" }.max { $0.end < $1.end }?.mainModel
+        let tokens = sessions.reduce(0) { $0 + $1.tokens.total }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Image(systemName: "terminal.fill").foregroundStyle(Theme.gemini)
+                Text("Antigravity CLI").font(.system(size: 13, weight: .semibold))
+                Spacer(minLength: 4)
+                Text(local.antigravityCLIPath != nil
+                     ? L("已安装", "Installed", ja: "インストール済み", ko: "설치됨")
+                     : L("本地记录", "Local records", ja: "ローカル記録", ko: "로컬 기록"))
+                    .font(Theme.caption).foregroundStyle(Theme.text2)
+            }
+            .help(local.antigravityCLIPath ?? "~/.gemini/antigravity-cli")
+            HStack(spacing: 12) {
+                TodayMetric(label: L("近 \(Store.scanDays) 天会话", "Sessions · \(Store.scanDays)d", ja: "直近\(Store.scanDays)日のセッション", ko: "최근 \(Store.scanDays)일 세션"), value: Fmt.count(sessions.count))
+                TodayMetric(label: "Token", value: Fmt.tokens(tokens))
+            }
+            if let latestModel {
+                Text(L("最近模型：", "Latest model: ", ja: "最新のモデル：", ko: "최근 모델: ") + Fmt.modelName(latestModel))
+                    .font(Theme.caption).foregroundStyle(Theme.text2)
+            } else if sessions.isEmpty {
+                Text(L("使用 agy 后，会自动显示会话、模型和 token 用量。",
+                       "Use agy to populate sessions, models and token usage.",
+                       ja: "agy を使用すると、セッション・モデル・トークン使用量が表示されます。",
+                       ko: "agy를 사용하면 세션, 모델, 토큰 사용량이 표시됩니다."))
+                    .font(Theme.caption).foregroundStyle(Theme.text2)
+            }
+            if !hasQuota {
+                Text(L("本机暂无额度数据；CLI 会话与用量仍正常统计。登录 Quotlet Cloud 后可显示其他 Mac 上报的额度。",
+                       "Quota is unavailable on this Mac; CLI sessions and usage are still tracked. Sign in to Quotlet Cloud to show quota from your other Macs.",
+                       ja: "この Mac の使用枠データはありません。CLI のセッションと使用量は引き続き集計されます。Quotlet Cloud にログインすると他の Mac の使用枠を表示できます。",
+                       ko: "이 Mac에 한도 데이터가 없습니다. CLI 세션과 사용량은 계속 집계됩니다. Quotlet Cloud에 로그인하면 다른 Mac의 한도를 표시할 수 있습니다."))
+                    .font(Theme.caption).foregroundStyle(Theme.text2)
+            }
+        }
+    }
+}
+
 /// 来源标题与额度分层；长范围名不再占用进度条的水平空间。
 struct ProviderGroup: View {
     let name: String
@@ -361,6 +415,8 @@ struct ProviderGroup: View {
     let source: Source
     let limits: [LimitItem]
     let now: Date
+    /// 非 nil 表示额度来自另一台 Mac 上报的云端快照
+    var sharedFrom: SharedQuota? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -371,8 +427,17 @@ struct ProviderGroup: View {
                     Text(plan).font(.system(size: 11)).foregroundStyle(Theme.text2)
                 }
                 Spacer(minLength: 8)
-                Text(L("已用", "Used", ja: "使用済み", ko: "사용량"))
-                    .font(.system(size: 10.5)).foregroundStyle(Theme.text2)
+                if let sharedFrom {
+                    Label(sharedFrom.device_name ?? "Mac", systemImage: "icloud")
+                        .font(.system(size: 10.5)).foregroundStyle(Theme.text2).lineLimit(1)
+                        .help(L("来自 \(sharedFrom.device_name ?? "Mac") 上报的额度（\(Fmt.time(sharedFrom.observedAt)) 更新）",
+                                "Quota reported by \(sharedFrom.device_name ?? "Mac") (updated \(Fmt.time(sharedFrom.observedAt)))",
+                                ja: "\(sharedFrom.device_name ?? "Mac") が報告した使用枠（\(Fmt.time(sharedFrom.observedAt)) 更新）",
+                                ko: "\(sharedFrom.device_name ?? "Mac")에서 보고한 한도 (\(Fmt.time(sharedFrom.observedAt)) 업데이트)"))
+                } else {
+                    Text(L("已用", "Used", ja: "使用済み", ko: "사용량"))
+                        .font(.system(size: 10.5)).foregroundStyle(Theme.text2)
+                }
             }
             VStack(alignment: .leading, spacing: 8) {
                 ForEach(limits) { item in
@@ -404,7 +469,8 @@ struct TodayBlock: View {
         var s: [String] = []
         if local.hasClaude { s.append("Claude Code") }
         if local.hasCodex { s.append("Codex") }
-        if local.hasGemini { s.append("Gemini") }
+        if local.hasAntigravityCLI { s.append("Antigravity CLI") }
+        if local.geminiLimits != nil || local.sessions.contains(where: { $0.source == .gemini && !$0.isAntigravityCLI }) { s.append("Gemini") }
         return s.isEmpty ? "Claude Code" : s.joined(separator: " + ")
     }
 
@@ -462,6 +528,26 @@ struct TodayBlock: View {
             .padding(.vertical, 9)
             .background(RoundedRectangle(cornerRadius: 10).fill(Theme.group))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.hairline, lineWidth: 1))
+            if let all = SharedCloud.shared.todayTotal(now: now) {
+                HStack(spacing: 5) {
+                    Image(systemName: "icloud")
+                    Text(L("全部 \(SharedCloud.shared.macCount) 台 Mac", "All \(SharedCloud.shared.macCount) Macs",
+                           ja: "全 \(SharedCloud.shared.macCount) 台の Mac", ko: "Mac \(SharedCloud.shared.macCount)대 전체"))
+                    Spacer(minLength: 4)
+                    Text(L("输出", "Output", ja: "出力", ko: "출력") + " " + Fmt.tokens(all.tokens.output))
+                    Text("·")
+                    Text(L("输入", "Input", ja: "入力", ko: "입력") + " " + Fmt.tokens(all.tokens.input + all.tokens.cacheRead + all.tokens.cacheWrite))
+                    Text("·")
+                    Text(L("请求", "Req", ja: "リクエスト", ko: "요청") + " " + Fmt.count(all.requests ?? 0))
+                }
+                .font(.system(size: 10.5)).monospacedDigit()
+                .foregroundStyle(Theme.text2)
+                .lineLimit(1)
+                .help(L("Quotlet Cloud 合并的今日用量：每台 Mac 各自上报，同一会话只算一次。",
+                        "Today's usage merged by Quotlet Cloud: each Mac reports its own logs, and a session is counted once.",
+                        ja: "Quotlet Cloud で合算した今日の使用量です。各 Mac が自分のログを報告し、同じセッションは 1 回だけ数えます。",
+                        ko: "Quotlet Cloud에서 합산한 오늘 사용량입니다. 각 Mac이 자체 로그를 보고하며 같은 세션은 한 번만 계산됩니다."))
+            }
         }
         .foregroundStyle(Theme.text)
     }

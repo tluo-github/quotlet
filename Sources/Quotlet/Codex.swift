@@ -243,7 +243,7 @@ enum CodexLogs {
             }()
             var tokens = TokenCount()
             for m in msgs { tokens += m.tokens }
-            messages.append(contentsOf: msgs.map { var m = $0; m.project = project; return m })
+            messages.append(contentsOf: msgs.map { var m = $0; m.project = project; m.sessionId = "codex-" + f.id; return m })
             var title = titles[f.id] ?? f.firstPrompt ?? L("（无标题）", "(untitled)", ja: "（無題）", ko: "(제목 없음)")
             title = title.replacingOccurrences(of: "\n", with: " ")
             if title.count > 60 { title = String(title.prefix(60)) + "…" }

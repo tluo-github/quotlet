@@ -339,20 +339,21 @@ final class CloudSync: ObservableObject {
             "tokens_cache_write": s.tokens.cacheWrite,
             "requests": s.requests,
         ]
+        if s.source == .gemini && s.isAntigravityCLI { p["is_antigravity_cli"] = true }
         if let resolvedDetail { p["status_detail"] = resolvedDetail }
         if uploadTitles && !Self.untitled.contains(s.title) { p["title"] = s.title }
         return p
     }
 
-    private static func dailyRows(_ l: LocalSnapshot) -> [(key: String, sig: String, payload: [String: Any])] {
+    /// 按天 + 项目 + 模型 + 会话汇总。带上会话 ID，云端才能在多台 Mac 上报同一会话时只算一次。
+    static func dailyRows(_ l: LocalSnapshot) -> [(key: String, sig: String, payload: [String: Any])] {
         struct Agg { var t = TokenCount(); var n = 0 }
-        var by: [String: (day: String, project: String, model: String, source: String, agg: Agg)] = [:]
-        let cal = Fmt.calendar
+        var by: [String: (day: String, project: String, model: String, source: String, session: String, agg: Agg)] = [:]
         for m in l.messages {
-            let c = cal.dateComponents([.year, .month, .day], from: m.ts)
-            let day = String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
-            let key = "\(day)|\(m.project)|\(m.model)"
-            var e = by[key] ?? (day, m.project, m.model, m.source.rawValue, Agg())
+            let day = SharedCloud.dayString(m.ts)
+            let session = m.sessionId ?? ""
+            let key = "\(day)|\(m.project)|\(m.model)|\(m.source.rawValue)|\(session)"
+            var e = by[key] ?? (day, m.project, m.model, m.source.rawValue, session, Agg())
             e.agg.t += m.tokens
             e.agg.n += 1
             by[key] = e
@@ -361,7 +362,7 @@ final class CloudSync: ObservableObject {
             let t = e.agg.t
             return (key, "\(t.input)|\(t.output)|\(t.cacheRead)|\(t.cacheWrite)|\(e.agg.n)", [
                 "day": e.day, "project": e.project, "model": e.model,
-                "source": e.source,
+                "source": e.source, "session_id": e.session,
                 "tokens_in": t.input, "tokens_out": t.output,
                 "tokens_cache_read": t.cacheRead, "tokens_cache_write": t.cacheWrite,
                 "requests": e.agg.n,

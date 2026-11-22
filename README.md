@@ -64,6 +64,8 @@ Update with `brew upgrade --cask quotlet`, remove with `brew uninstall --cask qu
 
 - The default mode reads local Claude Code, Codex and Antigravity (Gemini) logs for token stats and throughput, and queries Antigravity's local `127.0.0.1` service for Gemini quotas. To fetch Claude quota, enable **Settings → Quota API → Fetch Claude quota**. If macOS requires permission, click **Allow Keychain Access** in that same section. Notifications are on by default and require macOS permission. Existing explicit preferences are preserved.
 - If the numbers don't show up in the menu bar, macOS may have tucked them into the hidden part of the menu bar. Hold **Command** and drag them where you want; macOS remembers the position.
+- Works with only the Antigravity CLI (`agy`) installed: no Antigravity app needed. Quotlet detects the CLI and shows its sessions, latest model and token usage from `~/.gemini/antigravity-cli/brain`. Without local quota data it shows "no quota" and keeps counting local usage.
+- Several Macs on one Quotlet Cloud account share quota: if one Mac can't read a provider's quota (e.g. a Mac with only `agy`), it shows the newest 5-hour and weekly limits reported by your other Macs, marked with that Mac's name. The panel also shows today's usage across all Macs, counting each session once.
 - Settings (bottom right of the panel): language, appearance, menu bar source & style, refresh interval, launch at login, proxy and notifications.
 
 ## How it works
@@ -73,7 +75,7 @@ Update with `brew upgrade --cask quotlet`, remove with `brew uninstall --cask qu
 | Claude limits and reset times | `api.anthropic.com/api/oauth/usage` (optional, off by default) |
 | Claude sessions and tokens | Claude Code's local logs in `~/.claude/projects` |
 | Codex limits, sessions and tokens | Codex's local logs in `~/.codex/sessions` (sessions Codex imported from Claude Code are skipped) |
-| Gemini limits, sessions and tokens | Antigravity's local daemon on `127.0.0.1` (`~/.gemini/antigravity/daemon/hub_*.json`, cached locally) and read-only logs in `~/.gemini/antigravity/brain` |
+| Gemini limits, sessions and tokens | Antigravity's local daemon on `127.0.0.1` (`daemon/hub_*.json` under `~/.gemini/antigravity` and `~/.gemini/antigravity-cli`, cached locally) and read-only logs in `~/.gemini/antigravity/brain` and `~/.gemini/antigravity-cli/brain` |
 
 - Enabling the Claude quota API lets Quotlet read Claude Code's Keychain login (`Claude Code-credentials`, with local credential-file fallback) and contact Anthropic for quota data. Only the **Allow Keychain Access** button can trigger the macOS prompt for Claude credentials. Quotlet Cloud is a separate optional sign-in: it sends limits, token counts and session status (never prompts or code) to app.quotlet.com. Restoring a Cloud session at startup cannot show a Keychain prompt.
 - Claude Code logins expire every few hours and Claude Code renews them the next time you use it. If Quotlet says your login expired, send any message in Claude Code. Quotlet retries every minute and keeps showing the last data meanwhile.

@@ -61,6 +61,8 @@ brew install --cask quotlet
 ### 설치 후
 
 - 메뉴 막대에 숫자가 보이지 않으면 숨겨진 영역에 들어갔을 수 있습니다. **Command** 키를 누른 채 원하는 위치로 드래그하면 macOS가 위치를 기억합니다.
+- Antigravity CLI(`agy`)만 설치해도 사용할 수 있습니다. Antigravity 앱 없이 CLI를 감지해 `~/.gemini/antigravity-cli/brain`에서 세션, 최근 모델, 토큰 사용량을 표시합니다.
+- 같은 Quotlet Cloud 계정의 여러 Mac이 한도를 공유합니다. 어떤 Mac에서 한도를 읽을 수 없으면(`agy`만 설치된 Mac 등) 다른 Mac이 보고한 최신 5시간·주간 한도를 Mac 이름과 함께 표시하고, 모든 Mac의 오늘 합계도 보여 줍니다(같은 세션은 한 번만 계산).
 - 설정(패널 오른쪽 아래)에서 언어, 화면 모드, 메뉴 막대 표시, 새로 고침 주기, 로그인 시 실행, 프록시, 알림을 바꿀 수 있습니다.
 
 ## 작동 방식
@@ -70,7 +72,7 @@ brew install --cask quotlet
 | Claude 한도와 재설정 시각 | `api.anthropic.com/api/oauth/usage`(선택 사항, 기본 꺼짐) |
 | Claude 세션과 토큰 | `~/.claude/projects`에 있는 Claude Code 로컬 로그 |
 | Codex 한도, 세션, 토큰 | `~/.codex/sessions`에 있는 Codex 로컬 로그(Codex가 Claude Code에서 가져온 세션은 제외) |
-| Gemini 한도, 세션, 토큰 | `127.0.0.1`의 Antigravity 로컬 서비스(`~/.gemini/antigravity/daemon/hub_*.json`, 로컬 캐시 지원)와 `~/.gemini/antigravity/brain` 읽기 전용 로그 |
+| Gemini 한도, 세션, 토큰 | `127.0.0.1`의 Antigravity 로컬 서비스(IDE와 CLI 각각의 `daemon/hub_*.json`, 로컬 캐시 지원)와 `~/.gemini/antigravity/brain`·`~/.gemini/antigravity-cli/brain` 읽기 전용 로그 |
 
 - Quotlet는 Claude Code가 키체인에 저장한 로그인 정보(`Claude Code-credentials`)를 시스템의 `security` 명령으로 읽습니다. 로그인 정보를 갱신하거나 바꾸지 않으며, Quotlet Cloud에 로그인하지 않으면 네트워크 요청은 Anthropic에 사용량을 조회하는 것뿐입니다. Cloud에 로그인하면 한도, 토큰 수, 세션 상태(프롬프트와 코드는 제외)도 app.quotlet.com으로 보냅니다.
 - Claude Code 로그인은 몇 시간마다 만료되고, 다음에 Claude Code를 사용할 때 자동으로 갱신됩니다. Quotlet에 로그인 만료가 표시되면 Claude Code에서 아무 메시지나 보내세요. Quotlet는 1분마다 다시 시도하며 그동안 이전 데이터를 계속 보여 줍니다.

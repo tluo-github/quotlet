@@ -66,6 +66,8 @@ brew install --cask quotlet
 
 - 默认从本机 Claude Code、Codex 和 Antigravity（Gemini）日志统计 token 与实时速度，并通过本机 `127.0.0.1` 的 Antigravity 服务读取 Gemini 额度。需要 Claude 额度时，在设置 → 额度接口开启「查询 Claude 额度」。如果系统需要授权，点同一组里的「允许钥匙串访问」。通知默认开启，需允许 macOS 通知权限。已有的明确设置会保留。
 - 状态栏上看不到数字的话，可能被系统收进了折叠区。按住 **Command** 把它拖到想要的位置，系统会记住。
+- 只安装 Antigravity CLI（`agy`）也能使用：无需 Antigravity App，即可识别 CLI 安装并独立显示会话、最近使用的模型和 token 用量。会话从 `~/.gemini/antigravity-cli/brain` 及其会话数据库读取；未获取到额度时显示暂无额度，不影响本地统计。
+- 多台 Mac 登录同一个 Quotlet Cloud 账号时共享额度：某台 Mac 读不到某个来源的额度（例如只装了 `agy`），会显示其他 Mac 上报的最新 5 小时和每周额度，并标出来自哪台 Mac；面板「今天」下方还会显示全部 Mac 的今日合计，同一会话只算一次。
 - 设置（面板右下角）里有语言、外观、状态栏来源与样式、刷新频率、开机启动、网络代理和通知。
 
 ## 原理
@@ -75,7 +77,7 @@ brew install --cask quotlet
 | Claude 额度、重置时间 | `api.anthropic.com/api/oauth/usage`（可选，默认关闭） |
 | Claude 会话、token | 本机 `~/.claude/projects` 下的 Claude Code 日志 |
 | Codex 的额度、会话、token | 本机 `~/.codex/sessions` 下的 Codex 日志（Codex 从 Claude Code 导入的会话会跳过） |
-| Gemini 的额度、会话、token | 本机 `127.0.0.1` 的 Antigravity 本地服务（`~/.gemini/antigravity/daemon/hub_*.json`，支持离线缓存）与 `~/.gemini/antigravity/brain` 只读日志 |
+| Gemini 的额度、会话、token | 本机 `127.0.0.1` 的 Antigravity 本地服务（探测 IDE 与 CLI 各自的 `daemon/hub_*.json`，支持离线缓存）；会话与 token 独立读取 `~/.gemini/antigravity/brain` 和 `~/.gemini/antigravity-cli/brain` 日志 |
 
 - 开启 Claude 额度接口后，Quotlet 通过系统钥匙串读取 Claude Code 的登录信息（`Claude Code-credentials`，兼容本机凭证文件），并向 Anthropic 查询额度。只有点「允许钥匙串访问」才可能弹出读取 Claude 凭证的系统授权框。Quotlet Cloud 是独立的可选登录功能，可将额度、token 数量和会话状态（不含提示词和代码）同步到 app.quotlet.com。启动时恢复云登录采用无交互方式。
 - Claude Code 的登录每隔几个小时会过期，下次使用 Claude Code 时会自动续上。Quotlet 提示登录过期时，在 Claude Code 里随便发一句话就行。Quotlet 每分钟重试一次，期间继续显示上一次的数据。

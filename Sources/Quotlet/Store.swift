@@ -1,3 +1,4 @@
+import Combine
 import AppKit
 import Foundation
 import ServiceManagement
@@ -61,6 +62,25 @@ final class Store: ObservableObject {
     private var quotaEstimator = ClaudeQuotaEstimator()
 
     func displayedClaudeUsage(now: Date) -> UsageSnapshot? {
+        if let shared = sharedClaude { return shared.snapshot(now: now) }
+        return localClaudeUsage(now: now)
+    }
+
+    /// 本机 Claude 额度的采集时间（接口或 statusLine）；没有本机额度时为 nil
+    private var localClaudeObservedAt: Date? {
+        if usageAPIEnabled { return usage == nil ? nil : lastUpdated }
+        if claudeStatusLineEnabled { return ClaudeStatusLineManager.shared.latest?.observedAt }
+        return nil
+    }
+
+    /// 其他 Mac 上报的、比本机更新的额度（同一账号的额度是同一份数据）
+    var sharedClaude: SharedQuota? { SharedCloud.shared.quota(.claude, localObservedAt: localClaudeObservedAt) }
+    var sharedCodex: SharedQuota? { SharedCloud.shared.quota(.codex, localObservedAt: local?.codexLimits?.observedAt) }
+    var sharedGemini: SharedQuota? { SharedCloud.shared.quota(.gemini, localObservedAt: local?.geminiLimits?.observedAt) }
+    /// 本机或其他 Mac 有 Claude 额度可显示
+    var hasClaudeQuotaDisplay: Bool { hasClaudeQuotaSource || sharedClaude != nil }
+
+    private func localClaudeUsage(now: Date) -> UsageSnapshot? {
         if !usageAPIEnabled, claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest {
             let base = snap.toUsageSnapshot(now: now)
             return quotaEstimator.display(base, messages: local?.messages ?? [], now: now)
@@ -181,10 +201,19 @@ final class Store: ObservableObject {
     static let scanDays = 31
 
     /// Codex 的额度（没装或没用过 Codex 时为空）
-    func codexLimits(now: Date) -> [LimitItem] { local?.codexLimits?.limitItems(now: now) ?? [] }
+    func codexLimits(now: Date) -> [LimitItem] {
+        if let shared = sharedCodex { return shared.limitItems(now: now) }
+        return local?.codexLimits?.limitItems(now: now) ?? []
+    }
+    var codexPlan: String? { sharedCodex.map { $0.plan } ?? local?.codexLimits?.planTitle }
     /// Gemini 的额度（没装或没用过 Antigravity 时为空）
-    func geminiLimits(now: Date) -> [LimitItem] { local?.geminiLimits?.limitItems(now: now) ?? [] }
+    func geminiLimits(now: Date) -> [LimitItem] {
+        if let shared = sharedGemini { return shared.limitItems(now: now) }
+        return local?.geminiLimits?.limitItems(now: now) ?? []
+    }
+    var geminiPlan: String? { sharedGemini.map { $0.plan } ?? local?.geminiLimits?.planTitle }
     private var timers: [Timer] = []
+    private var sharedWatch: AnyCancellable?
 
     init() {
         Network.registerDefaults()
@@ -221,6 +250,8 @@ final class Store: ObservableObject {
         ClaudeStatusLineManager.shared.onSnapshot = { [weak self] snap in
             self?.applyStatusLineSnapshot(snap)
         }
+
+        sharedWatch = SharedCloud.shared.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
 
         Notifier.shared.setup { [weak self] in self?.evaluateNotifications() }
         _ = HookManager.shared
@@ -282,10 +313,10 @@ final class Store: ObservableObject {
         }
     }
 
-    var menuBarShowsWarning: Bool { menuBarSource == .claude && usage == nil && errorMessage != nil }
+    var menuBarShowsWarning: Bool { menuBarSource == .claude && usage == nil && errorMessage != nil && sharedClaude == nil }
 
     var menuBarText: String {
-        if menuBarSource == .claude, !hasClaudeQuotaSource {
+        if menuBarSource == .claude, !hasClaudeQuotaDisplay {
             guard let local else { return "—" }
             let start = Fmt.calendar.startOfDay(for: Date())
             let total = local.messages.lazy.filter { $0.source == .claude && $0.ts >= start }.reduce(0) { $0 + $1.tokens.total }
@@ -306,7 +337,7 @@ final class Store: ObservableObject {
     }
 
     var menuBarSymbol: String {
-        if menuBarSource == .claude, !hasClaudeQuotaSource { return "chart.bar" }
+        if menuBarSource == .claude, !hasClaudeQuotaDisplay { return "chart.bar" }
         if menuBarShowsWarning { return "exclamationmark.triangle" }
         let limits = menuBarLimits
         let p = max(limits.session?.percent ?? 0, limits.weekly?.percent ?? 0)
@@ -347,6 +378,7 @@ final class Store: ObservableObject {
         let stale = lastUpdated.map { Date().timeIntervalSince($0) > 120 } ?? true
         if stale && !rateLimited { refreshUsage() }
         refreshLocal()
+        SharedCloud.shared.refresh()
     }
 
     private func refreshUsage(allowInteraction: Bool = false) {

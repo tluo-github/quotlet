@@ -31,10 +31,13 @@ enum Demo {
             let t = titles[i % titles.count]
             return SessionSummary(id: s.id, project: fake(s.project), cwd: nil,
                                   title: L(t.0, t.1, ja: t.2, ko: t.3), start: s.start, end: s.end, tokens: s.tokens,
-                                  subagentTokens: s.subagentTokens, requests: s.requests, mainModel: s.mainModel, source: s.source)
+                                  subagentTokens: s.subagentTokens, requests: s.requests, mainModel: s.mainModel, source: s.source,
+                                  isAntigravityCLI: s.isAntigravityCLI)
         }
         let messages = snap.messages.map { m -> MessageUsage in var m = m; m.project = fake(m.project); return m }
         return LocalSnapshot(sessions: sessions, messages: messages, codexLimits: snap.codexLimits,
-                             geminiLimits: snap.geminiLimits, liveActivities: snap.liveActivities)
+                             geminiLimits: snap.geminiLimits,
+                             antigravityCLIPath: snap.antigravityCLIPath == nil ? nil : "~/.local/bin/agy",
+                             liveActivities: snap.liveActivities)
     }
 }
