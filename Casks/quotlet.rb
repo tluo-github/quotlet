@@ -1,9 +1,9 @@
 cask "quotlet" do
   arch arm: "arm64", intel: "x86_64"
 
-  version "0.9.0"
-  sha256 arm:   "8d7bf1e7b65415de5e6feedfb9b6ba10f1ff355dcb3764867267548faee9cd94",
-         intel: "3f8eba091ef752ba75087eabaae4bc6a500bf46b85c385531340dd53872ffd68"
+  version "0.9.1"
+  sha256 arm:   "97a825cbafd5b755aa2cff02f936a632fd51a730a6d25659942f13af21427713",
+         intel: "34a2ec74836ff33b96e39c0d6d13fae5d68daab07059335005f42f7871ffc86d"
 
   url "https://github.com/tluo-github/quotlet/releases/download/v#{version}/Quotlet-#{version}-#{arch}.zip"
   name "Quotlet"
