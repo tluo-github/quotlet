@@ -53,7 +53,7 @@ hr{border:none;border-top:1px solid var(--line);margin:40px 0}
   <h2>3. How Data Is Stored &amp; Shared</h2>
   <ul>
     <li>Data is transmitted over HTTPS (TLS) and stored in Cloudflare D1 solely to provide synchronization and remote command delivery across your signed-in devices.</li>
-    <li>Authentication tokens are stored locally in your device Keychain (iOS/macOS) or private app storage (Android).</li>
+    <li>Authentication tokens are stored locally in your device Keychain (iOS/macOS) or encrypted via Android Keystore (Android).</li>
     <li>Transactional login verification emails are delivered via Resend; GitHub OAuth is used only if you choose "Sign in with GitHub".</li>
   </ul>
 

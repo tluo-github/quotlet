@@ -15,11 +15,17 @@ final class HistoryWindowController: NSObject, NSWindowDelegate {
     func show(store: Store) {
         if window == nil {
             let host = NSHostingController(rootView: HistoryView().environmentObject(store))
-            host.sceneBridgingOptions = [.toolbars, .title]
+            if #available(macOS 14.0, *) {
+                host.sceneBridgingOptions = [.toolbars, .title]
+            }
             let w = NSWindow(contentViewController: host)
             w.title = L("用量历史", "Usage History", ja: "使用量の履歴", ko: "사용량 기록")
-            w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-            w.toolbarStyle = .unified
+            if #available(macOS 14.0, *) {
+                w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+                w.toolbarStyle = .unified
+            } else {
+                w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            }
             w.isReleasedWhenClosed = false
             w.delegate = self
             w.setContentSize(NSSize(width: 1120, height: 820))
@@ -297,6 +303,11 @@ struct HistoryView: View {
                 .frame(maxWidth: .infinity)
             }
             .background(Theme.surface)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if #unavailable(macOS 14.0) {
+                    legacyToolbar
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) { statusBar(data) }
         }
         .toolbar {
@@ -319,6 +330,31 @@ struct HistoryView: View {
             }
         }
         .frame(minWidth: 820, minHeight: 560)
+    }
+
+    private var legacyToolbar: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Picker(L("来源", "Source", ja: "ソース", ko: "소스"), selection: $source) {
+                    ForEach(SourceFilter.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.menu)
+                .frame(width: 150)
+                Spacer()
+                Picker(L("时间段", "Range", ja: "期間", ko: "기간"), selection: $range) {
+                    ForEach(HistoryRange.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 420)
+                Spacer()
+                Button(L("导出 CSV…", "Export CSV…", ja: "CSV を書き出す…", ko: "CSV 내보내기…")) { exportCSV() }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Theme.group)
+            Divider()
+        }
     }
 
     private func subtitle(_ d: HistoryData) -> String {
@@ -746,8 +782,8 @@ private struct ProjectTrendCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .onChange(of: data.start) { cursor = nil }
-        .onChange(of: data.end) { cursor = nil }
+        .compatOnChange(of: data.start) { _ in cursor = nil }
+        .compatOnChange(of: data.end) { _ in cursor = nil }
     }
 
     private var title: some View {
@@ -835,24 +871,31 @@ private struct ProjectTrendCard: View {
                     }
                 }
                 if let picked, !series.isEmpty {
-                    RuleMark(x: .value("Date", picked))
-                        .foregroundStyle(Theme.marker.opacity(0.5))
-                        .annotation(position: .top, alignment: .leading, spacing: 8,
-                                    overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
-                            hoverDetails(series, at: picked)
-                        }
+                    if #available(macOS 14.0, *) {
+                        RuleMark(x: .value("Date", picked))
+                            .foregroundStyle(Theme.marker.opacity(0.5))
+                            .annotation(position: .top, alignment: .leading, spacing: 8,
+                                        overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))) {
+                                hoverDetails(series, at: picked)
+                            }
+                    } else {
+                        RuleMark(x: .value("Date", picked))
+                            .foregroundStyle(Theme.marker.opacity(0.5))
+                            .annotation(position: .top, alignment: .leading, spacing: 8) {
+                                hoverDetails(series, at: picked)
+                            }
+                    }
                 }
             }
             .chartLegend(.hidden)
-            .chartXSelection(value: $cursor)
+            .compatChartXSelection(value: $cursor)
             .chartOverlay { proxy in
                 GeometryReader { geometry in
                     Color.clear.contentShape(Rectangle())
                         .onContinuousHover { phase in
                             switch phase {
                             case .active(let location):
-                                if let anchor = proxy.plotFrame {
-                                    let plot = geometry[anchor]
+                                if let plot = proxy.compatPlotRect(in: geometry) {
                                     cursor = plot.contains(location) ? proxy.value(atX: location.x - plot.minX, as: Date.self) : nil
                                 } else { cursor = nil }
                             case .ended: cursor = nil
@@ -1025,7 +1068,7 @@ private struct SessionsCard: View {
                 GeometryReader { proxy in
                     Color.clear
                         .onAppear { availableWidth = proxy.size.width }
-                        .onChange(of: proxy.size.width) { _, width in availableWidth = width }
+                        .compatOnChange(of: proxy.size.width) { width in availableWidth = width }
                 }
             }
         }

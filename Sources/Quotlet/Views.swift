@@ -68,7 +68,7 @@ struct ContentView: View {
                         .padding(.vertical, 12)
                     }
                     .scrollIndicators(.hidden)
-                    .scrollBounceBehavior(.basedOnSize)
+                    .compatScrollBounceBasedOnSize()
                     .id(tab)
                 }
                 .frame(maxHeight: .infinity)
@@ -958,7 +958,7 @@ struct SettingsView: View {
                     TextField("7890", text: $portText)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 52)
-                        .onChange(of: portText) { _, new in
+                        .compatOnChange(of: portText) { new in
                             let digits = new.filter(\.isNumber)
                             if digits != new { portText = digits }
                             if let p = Int(digits), (1...65535).contains(p) { store.proxyPort = p }

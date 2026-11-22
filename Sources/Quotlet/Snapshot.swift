@@ -66,10 +66,14 @@ enum Snapshot {
                 let size = host.fittingSize
                 let win = KeyWindow(contentViewController: controller)
                 if page == "history" {
-                    controller.sceneBridgingOptions = [.toolbars, .title]
+                    if #available(macOS 14.0, *) {
+                        controller.sceneBridgingOptions = [.toolbars, .title]
+                        win.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+                        win.toolbarStyle = .unified
+                    } else {
+                        win.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+                    }
                     win.title = L("用量历史", "Usage History", ja: "使用量の履歴", ko: "사용량 기록")
-                    win.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-                    win.toolbarStyle = .unified
                 } else {
                     win.styleMask = .borderless
                 }

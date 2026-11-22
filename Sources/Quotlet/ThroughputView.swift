@@ -30,7 +30,7 @@ struct ThroughputView: View {
             }
         }
         .foregroundStyle(Theme.text)
-        .onChange(of: seconds) { _, _ in
+        .compatOnChange(of: seconds) { _ in
             selected = nil
             hoveredFraction = nil
         }
@@ -253,7 +253,7 @@ struct ThroughputView: View {
             }
         }
         .chartXAxis(.hidden)
-        .chartXSelection(value: $selected)
+        .compatChartXSelection(value: $selected)
         .chartOverlay { proxy in
             GeometryReader { geometry in
                 ZStack(alignment: .topLeading) {
@@ -261,8 +261,7 @@ struct ThroughputView: View {
                         .onContinuousHover { phase in
                             switch phase {
                             case .active(let location):
-                                if let frame = proxy.plotFrame {
-                                    let rect = geometry[frame]
+                                if let rect = proxy.compatPlotRect(in: geometry) {
                                     hoveredFraction = rect.contains(location) && rect.width > 0
                                         ? min(1, max(0, Double((location.x - rect.minX) / rect.width))) : nil
                                     selected = nil
@@ -272,9 +271,8 @@ struct ThroughputView: View {
                                 selected = nil
                             }
                         }
-                    if let focus, let frame = proxy.plotFrame,
+                    if let focus, let rect = proxy.compatPlotRect(in: geometry),
                        let x = proxy.position(forX: focus.date) {
-                        let rect = geometry[frame]
                         let width = min(rect.width, focus.estimated > 0 ? 166.0 : 138.0)
                         // 提示框固定在图底，并在左右边缘收进绘图区，不遮住相邻来源和刻度。
                         hoverLabel(focus)
@@ -325,7 +323,7 @@ private struct SpeedOrb: View {
             Image(systemName: symbol)
                 .font(.system(size: diameter / 3, weight: .light))
                 .foregroundStyle(speed > 0 ? Theme.throughput : Theme.text2)
-                .contentTransition(.symbolEffect(.replace))
+                .compatSymbolReplaceTransition()
             Circle().fill(active ? Theme.live : Theme.marker).frame(width: 3, height: 3).offset(y: diameter * 23 / 72)
         }
         .frame(width: diameter, height: diameter)

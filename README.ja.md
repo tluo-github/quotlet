@@ -33,7 +33,7 @@ Quotlet は **Claude Code**、**Codex**、**Antigravity（Gemini）** のトー�
 
 ## 動作環境
 
-- macOS 14 Sonoma 以降（Apple シリコン / Intel）
+- macOS 13 Ventura 以降（Apple シリコン / Intel）
 - Claude Code・Codex・Antigravity（Gemini）のいずれかのローカルログ（Claude サブスクリプション枠の取得には Claude Pro / Max でのログインが必要）
 
 ## インストール
@@ -42,7 +42,7 @@ Quotlet は **Claude Code**、**Codex**、**Antigravity（Gemini）** のトー�
 
 Mac でコマンドを実行できる AI アシスタントに送ってください。
 
-> この Mac に Quotlet をインストールしてください。https://quotlet.com の公式手順と https://github.com/tluo-github/quotlet の公式リリースを使ってください。macOS 14 以降であることを確認し、Homebrew または署名・公証済みのパッケージでインストールして、Quotlet を起動してください。
+> この Mac に Quotlet をインストールしてください。https://quotlet.com の公式手順と https://github.com/tluo-github/quotlet の公式リリースを使ってください。macOS 13 以降であることを確認し、Homebrew または署名・公証済みのパッケージでインストールして、Quotlet を起動してください。
 
 ### ダウンロード
 

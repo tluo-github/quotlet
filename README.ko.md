@@ -33,7 +33,7 @@ Quotlet는 **Claude Code**, **Codex**, **Antigravity(Gemini)**의 토큰, 세션
 
 ## 요구 사항
 
-- macOS 14 Sonoma 이상(Apple 실리콘 / Intel)
+- macOS 13 Ventura 이상(Apple 실리콘 / Intel)
 - Claude Code, Codex 또는 Antigravity(Gemini)의 로컬 로그(Claude 구독 한도 조회에는 Claude Pro / Max 로그인 필요)
 
 ## 설치
@@ -42,7 +42,7 @@ Quotlet는 **Claude Code**, **Codex**, **Antigravity(Gemini)**의 토큰, 세션
 
 Mac에서 명령을 실행할 수 있는 AI 도우미에게 보내세요.
 
-> 이 Mac에 Quotlet을 설치해 주세요. https://quotlet.com 의 공식 안내와 https://github.com/tluo-github/quotlet 의 공식 릴리스를 사용하세요. macOS 14 이상인지 확인하고 Homebrew 또는 서명 및 공증된 패키지로 설치한 다음 Quotlet을 실행해 주세요.
+> 이 Mac에 Quotlet을 설치해 주세요. https://quotlet.com 의 공식 안내와 https://github.com/tluo-github/quotlet 의 공식 릴리스를 사용하세요. macOS 13 이상인지 확인하고 Homebrew 또는 서명 및 공증된 패키지로 설치한 다음 Quotlet을 실행해 주세요.
 
 ### 다운로드
 

@@ -37,7 +37,7 @@ Quotlet 默认从本机日志与本地服务统计 **Claude Code**、**Codex** �
 
 ## 系统要求
 
-- macOS 14 Sonoma 或更新，Apple 芯片和 Intel 都支持
+- macOS 13 Ventura 或更新，Apple 芯片和 Intel 都支持
 - 本机有 Claude Code、Codex 或 Antigravity（Gemini）日志；查询 Claude 订阅额度时，还需 Claude Code 已用 Pro 或 Max 套餐登录
 
 ## 安装
@@ -46,7 +46,7 @@ Quotlet 默认从本机日志与本地服务统计 **Claude Code**、**Codex** �
 
 把下面这段话发给能在 Mac 上执行命令的 AI 助手。
 
-> 请帮我在这台 Mac 上安装 Quotlet。按官网 https://quotlet.com 的说明操作，官方安装包在 https://github.com/tluo-github/quotlet。先确认 macOS 为 14 或更新版本，再使用 Homebrew 或已签名公证的正式安装包安装，完成后启动 Quotlet。
+> 请帮我在这台 Mac 上安装 Quotlet。按官网 https://quotlet.com 的说明操作，官方安装包在 https://github.com/tluo-github/quotlet。先确认 macOS 为 13 或更新版本，再使用 Homebrew 或已签名公证的正式安装包安装，完成后启动 Quotlet。
 
 ### 下载
 

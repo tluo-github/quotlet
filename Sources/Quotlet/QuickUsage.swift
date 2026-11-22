@@ -267,7 +267,7 @@ private struct DailyChart: View {
                     .foregroundStyle(focus.map { cal.isDate($0.day, inSameDayAs: d.day) } == true
                                      ? Theme.dataStrong : Theme.data)
             }
-            .chartXSelection(value: $selected)
+            .compatChartXSelectionWithHover(value: $selected)
             .chartYAxis {
                 AxisMarks(values: [0]) { _ in
                     AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(Theme.divider)

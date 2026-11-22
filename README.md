@@ -35,7 +35,7 @@ Quotlet tracks **Claude Code**, **Codex** and **Antigravity (Gemini)** tokens, s
 
 ## Requirements
 
-- macOS 14 Sonoma or later, Apple silicon or Intel
+- macOS 13 Ventura or later, Apple silicon or Intel
 - Local Claude Code, Codex or Antigravity (Gemini) logs; fetching Claude subscription limits additionally requires Claude Code signed in with a Pro or Max plan
 
 ## Install
@@ -44,7 +44,7 @@ Quotlet tracks **Claude Code**, **Codex** and **Antigravity (Gemini)** tokens, s
 
 Copy the following into an AI assistant that can run commands on your Mac.
 
-> Please install Quotlet on this Mac. Use the official instructions at https://quotlet.com and releases from https://github.com/tluo-github/quotlet. Confirm macOS 14 or later, install with Homebrew or the signed and notarized package, then launch Quotlet.
+> Please install Quotlet on this Mac. Use the official instructions at https://quotlet.com and releases from https://github.com/tluo-github/quotlet. Confirm macOS 13 or later, install with Homebrew or the signed and notarized package, then launch Quotlet.
 
 ### Download
 
