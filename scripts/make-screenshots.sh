@@ -1,5 +1,5 @@
 #!/bin/bash
-# 重新生成 README 和门户网站用的截图（四种语言），用 -demo YES 把会话标题和项目名换成示例文字。
+# 重新生成 README 和门户网站用的截图（五种语言），用 -demo YES 把会话标题和项目名换成示例文字。
 #   docs/usage-<语言>.png     面板（带展示背景和仿状态栏，3 倍像素）
 #   docs/settings-<语言>.png  设置页
 #   docs/panel-<语言>.png     深色面板，不带背景（门户首屏）
@@ -7,6 +7,7 @@
 #   docs/history-<语言>.png   用量历史窗口（含原生工具栏）
 # 用法: scripts/make-screenshots.sh [--panels-only]
 # --panels-only：只更新面板和设置，用缓存额度。
+# 环境变量：LANGS="zh-Hant" 只生成指定语言；OFFLINE=1 全部用缓存额度（不调接口）。
 # 所有页面均在屏幕外渲染，无需「屏幕录制」权限。
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -17,8 +18,8 @@ BIN=build/Quotlet.app/Contents/MacOS/Quotlet
 TMP=$(mktemp -d)
 
 first=1
-for l in zh en ja ko; do
-    off=(); [[ $first == 1 && $PANELS_ONLY == false ]] || off=(-offline YES); first=0
+for l in ${LANGS:-zh zh-Hant en ja ko}; do
+    off=(); [[ $first == 1 && $PANELS_ONLY == false && -z "${OFFLINE:-}" ]] || off=(-offline YES); first=0
     "$BIN" --snapshot "$TMP/$l" -stage YES -demo YES -language "$l" -appearance light -scale 3 -snapshotHistoryHeight 820 ${off[@]+"${off[@]}"}
     cp "$TMP/$l/usage-light.png" "docs/usage-$l.png"
     cp "$TMP/$l/settings-light.png" "docs/settings-$l.png"

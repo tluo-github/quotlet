@@ -30,7 +30,7 @@ sed -e "s|{{VERSION}}|${VERSION}|g" \
 cp docs/icon.png "$OUT/assets/icon.png"
 cp Sources/Quotlet/ProviderAssets/*.png "$OUT/assets/"
 
-for lang in en zh ja ko; do
+for lang in en zh zh-Hant ja ko; do
   for page in usage settings panel; do
     cwebp -quiet -q 82 -resize 720 0 "docs/${page}-${lang}.png" -o "$OUT/assets/${page}-${lang}.webp"
   done

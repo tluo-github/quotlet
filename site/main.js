@@ -32,7 +32,7 @@ const T = {
     'f3.k': 'Throughput', 'f3.t': 'Live tok/s across all local AI', 'f3.d': "A real-time speed gauge and 1m / 2m / 5m chart combine concurrent output from Claude, Codex and Gemini, alongside today's tokens and API-equivalent cost.",
     'f4.k': 'Estimates', 'f4.t': 'Updates between refreshes', 'f4.d': "After calibration, new local tokens update Claude quota estimates in the panel and menu bar. The ≈ mark stays until the next API reading corrects the value.",
     'f5.k': 'History', 'f5.t': 'A usage history window', 'f5.d': "Use Sessions and Stats in the panel for recent activity. Open History for stacked Claude, Codex and Gemini charts, project trends, models, daily totals and CSV export. Daily totals stay on your Mac after old logs are cleared.",
-    'f6.k': 'Alerts', 'f6.t': 'Notifications, four languages', 'f6.d': "90%, 100% and reset alerts default to on for Claude, Codex and Gemini, including Claude estimates. Choose 80%, 90% or 95% for the early alert. Requires macOS notification permission.",
+    'f6.k': 'Alerts', 'f6.t': 'Notifications, five languages', 'f6.d': "90%, 100% and reset alerts default to on for Claude, Codex and Gemini, including Claude estimates. Choose 80%, 90% or 95% for the early alert. Requires macOS notification permission.",
     'shots.usage': 'Panel', 'shots.sessions': 'Sessions', 'shots.stats': 'Stats', 'shots.settings': 'Settings',
     'cloud.label': 'Quotlet Cloud', 'cloud.soon': "Optional sync",
     'cloud.title': 'The menu bar stays small. The details live on the web.',
@@ -93,7 +93,7 @@ const T = {
     'f3.k': '吞吐', 'f3.t': '本机全部 AI 实时速度', 'f3.d': '面板顶部实时仪表与 1 / 2 / 5 分钟曲线汇总 Claude、Codex 和 Gemini 并发输出速度（tok/s），下方同步呈现今日用量与 API 等值费用。',
     'f4.k': "估算", 'f4.t': "刷新间隔内继续更新", 'f4.d': "校准后根据本机新增 token 推算 Claude 额度，面板和状态栏用 ≈ 标记，下一次接口读数到达后自动校正。",
     'f5.k': '历史', 'f5.t': '用量历史窗口', 'f5.d': "面板内的会话和统计页查看近期活动，历史窗口支持三家堆叠柱状图、项目趋势、模型占比、每日汇总和 CSV 导出。旧日志清理后，每日汇总保留在本机。",
-    'f6.k': '提醒', 'f6.t': '通知和四种语言', 'f6.d': "Claude、Codex 和 Gemini 默认开启 90%、100% 和重置恢复提醒，Claude 估算值也参与提醒。提前提醒可选 80%、90% 或 95%，需允许 macOS 通知。",
+    'f6.k': '提醒', 'f6.t': '通知和五种语言', 'f6.d': "Claude、Codex 和 Gemini 默认开启 90%、100% 和重置恢复提醒，Claude 估算值也参与提醒。提前提醒可选 80%、90% 或 95%，需允许 macOS 通知。",
     'shots.usage': '面板', 'shots.sessions': '会话', 'shots.stats': '统计', 'shots.settings': '设置',
     'cloud.label': 'Quotlet Cloud', 'cloud.soon': "可选同步",
     'cloud.title': '状态栏保持小巧，详细的放到网页上。',
@@ -123,6 +123,67 @@ const T = {
     'foot.renamed': 'Quotlet 在 0.5 版之前叫 Quotabar。',
     'foot.issues': '反馈问题',
     'shots.history': '用量历史',
+  },
+  'zh-Hant': {
+    'meta.title': 'Quotlet — 在 Mac 選單列檢視 Claude、Codex 和 Gemini 額度與即時速度',
+    'nav.how': '原理', 'nav.features': '功能', 'nav.cloud': '雲同步', 'nav.trust': '隱私', 'nav.source': '原始碼',
+    'nav.language': '語言', 'nav.download': '下載',
+    'cta.copy': '複製', 'cta.copied': '已複製', 'cta.dmg': '下載 .dmg',
+    'cta.dmg.arm64': '下載 Apple 晶片版', 'cta.dmg.intel': '下載 Intel 晶片版',
+    'install.dmg.arm64': 'Apple 晶片 (.dmg)', 'install.dmg.intel': 'Intel 晶片 (.dmg)',
+    'hero.label': 'macOS 選單列 · 免費開源',
+    'hero.title': '額度還剩多少，<em>一眼就知道。</em>',
+    'hero.lead': "在 Mac 選單列統一檢視 Claude、Codex 和 Gemini 額度、即時輸出速度（tok/s）與重置時間。某一家額度緊張時，自動提示切換到更寬裕的一家。",
+    'hero.meta': 'macOS 13+ · Apple 晶片和 Intel · 已簽署和公證',
+    'highlight.speed': '即時吞吐與即時估算',
+    'highlight.pace': "每秒重新整理全部本機 AI 的輸出速度（tok/s），並在 Claude API 重新整理間隔內按本機 token 估算額度。",
+    'highlight.project': '用量花在哪些專案', 'highlight.trend': "按專案、工作階段、模型和日期對比 Claude Code、Codex 與 Gemini 的 token 用量。",
+    'highlight.local': '預設留在本機', 'highlight.sync': 'Codex 和 Gemini 只讀取本機資料；Claude 額度 API 與雲同步預設關閉，按需開啟。',
+    'how.label': '原理',
+    'how.title': "API 重新整理之間，本機用量繼續更新。",
+    'how.lead': "Quotlet 監聽本機 Claude Code、Codex 和 Antigravity（Gemini）日誌。Codex 額度來自本機日誌，Gemini 額度來自本地 Antigravity 服務；開啟 Claude 額度查詢後預設每 10 分鐘取得 API 讀數，間隔內按本機新增 token 校準估算。",
+    'how.p1.t': "本機日誌與本地服務即時更新。", 'how.p1.d': "用戶端寫入新記錄後約一秒更新 token、速度與額度。Codex 直接讀取本機日誌；Gemini 透過本機 127.0.0.1 的 Antigravity 服務查詢並本地快取。",
+    'how.p2.t': "Claude 重新整理間隔內自動估算。", 'how.p2.d': "同一時段內取得至少兩次有效讀數後，用新增 Claude token 推算額度並標記 ≈，下次 API 重新整理時自動校正。模型、快取和其他裝置用量會影響精度。",
+    'how.p3.t': "三家額度統一提醒。", 'how.p3.d': "Claude、Codex 和 Gemini 預設開啟 90% 快到上限、100% 已用完和重置恢復提醒，Claude 估算值也會觸發。首次使用需允許 macOS 通知。",
+    'term.resets': '重置', 'term.today': '今天 10:30', 'term.sunday': '本週日 03:00',
+    'term.empty': "≈ 根據本機新增 token 估算", 'term.bythen': "Claude API 預設每 10 分鐘校正一次",
+    'features.label': '功能',
+    'features.title': "吞吐、額度、工作階段和統計，都在一個面板。",
+    'f1.k': '選單列', 'f1.t': '一直看得到', 'f1.d': '選單列可自由選擇顯示 Claude、Codex 或 Gemini，支援「5h 41% 週 62%」或簡潔「41% 62%」，在面板頂部隨時切換來源。',
+    'f2.k': '額度', 'f2.t': 'Claude、Codex 和 Gemini 放在一起', 'f2.d': "同屏檢視三家的 5 小時、每週及細分模型額度。某一家快到上限而其他仍有餘量時，頂部自動給出切換建議。",
+    'f3.k': '吞吐', 'f3.t': '本機全部 AI 即時速度', 'f3.d': '面板頂部即時儀表與 1 / 2 / 5 分鐘曲線彙總 Claude、Codex 和 Gemini 並行輸出速度（tok/s），下方同步呈現今日用量與 API 等值費用。',
+    'f4.k': "估算", 'f4.t': "重新整理間隔內繼續更新", 'f4.d': "校準後根據本機新增 token 推算 Claude 額度，面板和選單列用 ≈ 標記，下一次 API 讀數到達後自動校正。",
+    'f5.k': '歷史', 'f5.t': '用量歷史視窗', 'f5.d': "面板內的工作階段和統計頁檢視近期活動，歷史視窗支援三家堆疊長條圖、專案趨勢、模型佔比、每日彙總和 CSV 匯出。舊日誌清理後，每日彙總保留在本機。",
+    'f6.k': '提醒', 'f6.t': '通知和五種語言', 'f6.d': "Claude、Codex 和 Gemini 預設開啟 90%、100% 和重置恢復提醒，Claude 估算值也參與提醒。提前提醒可選 80%、90% 或 95%，需允許 macOS 通知。",
+    'shots.usage': '面板', 'shots.sessions': '工作階段', 'shots.stats': '統計', 'shots.settings': '設定',
+    'cloud.label': 'Quotlet Cloud', 'cloud.soon': "可選同步",
+    'cloud.title': '選單列保持小巧，詳細的放到網頁上。',
+    'cloud.lead': '登入後開啟 app.quotlet.com 看全貌：每台 Mac 的額度、工作階段記錄、哪些工作階段在執行或等你處理、token 趨勢，手機上也能看。',
+    'cloud.p1.t': '可選，預設關閉。', 'cloud.p1.d': "本地統計、Codex 和 Gemini 無需連線外部伺服器。開啟 Claude 額度查詢後連線 Anthropic；透過瀏覽器登入後可啟用可選雲同步。",
+    'cloud.p2.t': "選擇同步內容。", 'cloud.p2.d': "同步額度、token 數量和工作階段狀態，工作階段標題有單獨的上傳開關。提示詞和程式碼保留在本機。",
+    'cloud.p3.t': '隨時可以停。', 'cloud.p3.d': '在 Mac 上登出，或者在網站上移除這台 Mac，它就不再上傳任何東西。',
+    'trust.label': '隱私',
+    'trust.title': '不用信我們的話，自己查。',
+    'trust.lead': "本機日誌提供 token 統計。Claude 額度查詢和雲同步均為可選連線，可在設定中控制。",
+    't1.t': "Claude 額度查詢按需開啟", 't1.d': "在設定中開啟後，透過 macOS 鑰匙圈讀取 Claude Code 憑證，向 Anthropic 查詢額度。系統需要授權時，使用專用授權按鈕允許存取。",
+    't2.t': "按需開啟的連線", 't2.d': "本地模式只讀取 Mac 本機檔案，Gemini 僅連線本機 127.0.0.1。Claude 額度查詢連線 api.anthropic.com，雲登入和同步連線 app.quotlet.com。",
+    't3.t': '日誌唯讀', 't3.d': '工作階段和 token 只從 Claude Code、Codex 和 Antigravity 本來就存在你 Mac 上的日誌裡讀取，從來不寫。',
+    't4.t': '簽署和公證', 't4.d': "官方下載檔使用 Developer ID 簽署，並經過 Apple 公證。",
+    't5.t': '開源', 't5.d': 'MIT 授權，每一行程式碼都在 GitHub 上，一條命令就能自己編譯。',
+    'install.label': '安裝', 'install.title': "選一種適合你的安裝方式。",
+    "install.ai.t": "讓你的 AI 幫你安裝",
+    "install.ai.d": "複製這段提示詞，發給能在 Mac 上執行命令的 AI 助手。",
+    "install.ai.copy": "複製安裝提示詞",
+    "install.ai.prompt": "請幫我在這台 Mac 上安裝 Quotlet。官網是 https://quotlet.com，原始碼和官方安裝檔在 https://github.com/tluo-github/quotlet。先確認 macOS 為 13 或更新版本，再按官網說明使用 Homebrew 或已簽署公證的正式安裝檔安裝，完成後啟動 Quotlet。",
+    'install.dmg.t': '下載', 'install.dmg.d': '按晶片選擇 Apple 晶片或 Intel 晶片安裝檔，開啟 DMG 把 Quotlet 拖進「應用程式」。已簽署和公證，雙擊就能開啟。',
+    'install.src.t': '自己編譯', 'install.src.d': '需要 Xcode 命令列工具。',
+    'install.r1': 'macOS 13 Ventura 或更新，Apple 晶片和 Intel 都支援',
+    'install.r2': "本機有 Claude Code、Codex 或 Antigravity（Gemini）日誌。查詢 Claude 額度還需 Claude 訂閱帳號登入。",
+    'install.r3': '選單列上看不到數字？可能被系統收進了摺疊區。按住 ⌘ 把它拖到想要的位置。',
+    'foot.disclaimer': 'Quotlet 是獨立的開源專案，與 Anthropic、OpenAI 和 Google 均無關聯。Claude、Codex 和 Gemini 分別為各自所有者的商標。',
+    'foot.renamed': 'Quotlet 在 0.5 版之前叫 Quotabar。',
+    'foot.issues': '回饋問題',
+    'shots.history': '用量歷史',
   },
   ja: {
     'meta.title': 'Quotlet — Claude・Codex・Gemini の使用枠を Mac のメニューバーに',
@@ -154,7 +215,7 @@ const T = {
     'f3.k': 'スループット', 'f3.t': '全ローカル AI のリアルタイム tok/s', 'f3.d': 'リアルタイムの速度メーターと 1 / 2 / 5 分グラフで Claude・Codex・Gemini の並列出力を合算表示。今日のトークン数と API 換算金額も確認できます。',
     'f4.k': "推定", 'f4.t': "更新間隔も使用量を追跡", 'f4.d': "校正後は新しいローカルトークンから Claude 使用枠を推定します。パネルとメニューバーに ≈ を付け、次の API 応答で補正します。",
     'f5.k': '履歴', 'f5.t': '使用量の履歴ウィンドウ', 'f5.d': "パネルのセッションと統計で最近の活動を確認。履歴ウィンドウでは 3 サービス積み上げグラフ、プロジェクト推移、モデル別割合、日ごとの合計と CSV 書き出しを利用できます。古いログの削除後も日ごとの合計は Mac に残ります。",
-    'f6.k': '通知', 'f6.t': '通知と 4 言語', 'f6.d': "Claude・Codex・Gemini の 90%、100%、リセット後の通知は既定でオン。Claude の推定値も対象です。早期通知は 80・90・95% から選択でき、macOS の通知許可が必要です。",
+    'f6.k': '通知', 'f6.t': '通知と 5 言語', 'f6.d': "Claude・Codex・Gemini の 90%、100%、リセット後の通知は既定でオン。Claude の推定値も対象です。早期通知は 80・90・95% から選択でき、macOS の通知許可が必要です。",
     'shots.usage': 'パネル', 'shots.sessions': 'セッション', 'shots.stats': '統計', 'shots.settings': '設定',
     'cloud.label': 'Quotlet Cloud', 'cloud.soon': "任意の同期",
     'cloud.title': 'メニューバーは小さいまま。詳しくは Web で。',
@@ -215,7 +276,7 @@ const T = {
     'f3.k': '처리량', 'f3.t': '모든 로컬 AI의 실시간 tok/s', 'f3.d': '실시간 속도계와 1분 / 2분 / 5분 차트로 Claude, Codex, Gemini의 동시 출력을 합산해 보여 주며, 오늘의 토큰과 API 환산 비용도 함께 확인합니다.',
     'f4.k': "추정", 'f4.t': "새로 고침 사이에도 갱신", 'f4.d': "보정 후 새 로컬 토큰으로 Claude 한도를 추정합니다. 패널과 메뉴 막대에 ≈를 표시하고 다음 API 응답으로 보정합니다.",
     'f5.k': '기록', 'f5.t': '사용량 기록 창', 'f5.d': "패널의 세션과 통계에서 최근 활동을 확인하고, 기록 창에서 Claude·Codex·Gemini 누적 차트, 프로젝트 추이, 모델 비중, 일별 합계와 CSV 내보내기를 사용하세요. 오래된 로그를 지워도 일별 합계는 Mac에 보관됩니다.",
-    'f6.k': '알림', 'f6.t': '알림과 4개 언어', 'f6.d': "Claude, Codex, Gemini의 90%, 100%, 재설정 알림은 기본으로 켜져 있으며 Claude 추정값도 포함됩니다. 사전 알림은 80·90·95%에서 고를 수 있고 macOS 알림 권한이 필요합니다.",
+    'f6.k': '알림', 'f6.t': '알림과 5개 언어', 'f6.d': "Claude, Codex, Gemini의 90%, 100%, 재설정 알림은 기본으로 켜져 있으며 Claude 추정값도 포함됩니다. 사전 알림은 80·90·95%에서 고를 수 있고 macOS 알림 권한이 필요합니다.",
     'shots.usage': '패널', 'shots.sessions': '세션', 'shots.stats': '통계', 'shots.settings': '설정',
     'cloud.label': 'Quotlet Cloud', 'cloud.soon': "선택적 동기화",
     'cloud.title': '메뉴 막대는 작게. 자세한 내용은 웹에서.',
@@ -248,10 +309,11 @@ const T = {
   },
 }
 
-const HTML_LANG = { en: 'en', zh: 'zh-CN', ja: 'ja', ko: 'ko' }
+const HTML_LANG = { en: 'en', zh: 'zh-CN', 'zh-Hant': 'zh-TW', ja: 'ja', ko: 'ko' }
 const PREVIEW = {
   en: ['Appearance', 'System', 'Light', 'Dark', 'The Mac app, as it looks today'],
   zh: ['外观', '跟随系统', '浅色', '深色', 'Mac 客户端实际界面'],
+  'zh-Hant': ['外觀', '跟隨系統', '淺色', '深色', 'Mac 用戶端實際介面'],
   ja: ['外観', 'システム', 'ライト', 'ダーク', 'Mac アプリの実際の画面'],
   ko: ['외관', '시스템', '밝게', '어둡게', '실제 Mac 앱 화면'],
 }
@@ -262,7 +324,10 @@ function pickLang() {
   const q = new URLSearchParams(location.search).get('lang')
   if (q && T[q]) return q
   for (const l of navigator.languages || [navigator.language]) {
-    const p = (l || '').toLowerCase().slice(0, 2)
+    const s = (l || '').toLowerCase()
+    // zh-Hant / zh-TW / zh-HK / zh-MO → 繁体，其他中文 → 简体
+    if (s.startsWith('zh')) return /hant|^zh-(tw|hk|mo)/.test(s) && !s.includes('hans') ? 'zh-Hant' : 'zh'
+    const p = s.slice(0, 2)
     if (T[p]) return p
   }
   return 'en'
