@@ -56,5 +56,11 @@ done
 
 du -sh "$OUT"
 if [[ "${1:-}" == "deploy" ]]; then
-  cloud/node_modules/.bin/wrangler deploy --config site/wrangler.jsonc
+  if command -v wrangler >/dev/null 2>&1; then
+    wrangler deploy --config site/wrangler.jsonc
+  elif [[ -x ../quotlet-cloud/cloud/node_modules/.bin/wrangler ]]; then
+    ../quotlet-cloud/cloud/node_modules/.bin/wrangler deploy --config site/wrangler.jsonc
+  else
+    npx wrangler deploy --config site/wrangler.jsonc
+  fi
 fi
