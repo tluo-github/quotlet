@@ -1,5 +1,4 @@
 {
-  "$schema": "../cloud/node_modules/wrangler/config-schema.json",
   // 门户网站 quotlet.com：静态文件 + 一个很小的 Worker（只负责 www 跳转）。内容由 scripts/deploy-site.sh 打包到 build/site
   "name": "quotlet",
   "main": "worker.js",

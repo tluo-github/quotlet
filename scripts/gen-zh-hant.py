@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""从 Mac / iOS / Android 源码里的简体中文文案，生成繁体中文（台湾用语）对照表。
+"""从 Mac 源码里的简体中文文案，生成繁体中文（台湾用语）对照表。
 
 App 选繁体时，L() 拿简体文案按这张表转换（最长词优先，查不到的按单字转换）；
 官网 site/main.js 的繁体文案（'zh-Hant'）也由简体那份（zh）整块转换生成，
-README.zh-TW.md 由 README.zh-CN.md 转换生成，
-网页后台的繁体对照表 cloud/web/static/zh-hant.js 只收网页后台自己的文案。
+README.zh-TW.md 由 README.zh-CN.md 转换生成。
 新增或修改中文文案后重新跑一遍即可：
 
     uv run --with opencc python3 scripts/gen-zh-hant.py
 
 转换用 OpenCC 的 s2twp（简体 → 台湾正体 + 台湾常用词），再套用下面 OVERRIDES 里的产品用语。
-生成三个文件（内容相同），更新 site/main.js 里的繁体文案和 README.zh-TW.md，这些都不要手改：
+生成以下文件，更新 site/main.js 里的繁体文案和 README.zh-TW.md，这些都不要手改：
     Sources/Quotlet/ZhHantData.swift
-    ios/Quotlet/ZhHantData.swift
-    android/app/src/main/java/com/quotlet/ZhHantData.kt
 """
 
 import re
@@ -25,14 +22,9 @@ import opencc
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = [
     (ROOT / 'Sources', '*.swift'),
-    (ROOT / 'ios' / 'Quotlet', '*.swift'),
-    (ROOT / 'android' / 'app' / 'src' / 'main' / 'java', '*.kt'),
 ]
-GENERATED = {'ZhHantData.swift', 'ZhHantData.kt', 'zh-hant.js', 'i18n.js'}
-WEB_SOURCES = [(ROOT / 'cloud' / 'web' / 'static', '*.js'), (ROOT / 'cloud' / 'web' / 'static', '*.html')]
-OUT_WEB = ROOT / 'cloud/web/static/zh-hant.js'
-OUT_SWIFT = [ROOT / 'Sources/Quotlet/ZhHantData.swift', ROOT / 'ios/Quotlet/ZhHantData.swift']
-OUT_KOTLIN = ROOT / 'android/app/src/main/java/com/quotlet/ZhHantData.kt'
+GENERATED = {'ZhHantData.swift'}
+OUT_SWIFT = [ROOT / 'Sources/Quotlet/ZhHantData.swift']
 SITE_JS = ROOT / 'site/main.js'
 README_HANS = ROOT / 'README.zh-CN.md'
 README_HANT = ROOT / 'README.zh-TW.md'
@@ -217,21 +209,6 @@ def build_table(cc, runs: set[str]) -> list[str]:
     return [f'{k}\t{v}' for k, v in sorted(table.items(), key=lambda kv: (len(kv[0]), kv[0]))]
 
 
-def write_web(cc):
-    """网页后台用的对照表（只含网页后台的文案）"""
-    lines = build_table(cc, collect_runs(WEB_SOURCES, whole_file=True))
-    blob = '\n'.join(lines)
-    assert '`' not in blob and '${' not in blob and '\\' not in blob
-    OUT_WEB.write_text(
-        "'use strict'\n"
-        '// 自动生成，不要手改：uv run --with opencc python3 scripts/gen-zh-hant.py\n'
-        f'// 网页后台的简体 → 繁体（台湾）对照表，共 {len(lines)} 条，preferences.js 的 hant() 使用。\n'
-        f'const ZH_HANT_PAIRS = `{blob}`\n',
-        encoding='utf-8',
-    )
-    return len(lines)
-
-
 def main():
     cc = make_converter()
     runs = collect_runs()
@@ -244,15 +221,9 @@ def main():
     swift = header + 'enum ZhHantData {\n    static let pairs = #"""\n' + blob + '\n"""#\n}\n'
     for p in OUT_SWIFT:
         p.write_text(swift, encoding='utf-8')
-    # JVM 单个字符串常量不能超过 64KB（UTF-8），分段写
-    chunks = ['\n'.join(lines[i:i + 500]) for i in range(0, len(lines), 500)]
-    body = ',\n'.join(f'        """\n{c}\n"""' for c in chunks)
-    kotlin = header + 'package com.quotlet\n\ninternal object ZhHantData {\n    val PARTS = listOf(\n' + body + ',\n    )\n}\n'
-    OUT_KOTLIN.write_text(kotlin, encoding='utf-8')
     update_site(cc)
     update_readme(cc)
-    web_count = write_web(cc)
-    print(f'{len(runs)} 段中文，{len(lines)} 条对照，已写入 {len(OUT_SWIFT) + 1} 个文件，网页后台 {web_count} 条，并更新 site/main.js 和 README.zh-TW.md')
+    print(f'{len(runs)} 段中文，{len(lines)} 条对照，已写入 Sources/Quotlet/ZhHantData.swift，并更新 site/main.js 和 README.zh-TW.md')
 
 
 if __name__ == '__main__':

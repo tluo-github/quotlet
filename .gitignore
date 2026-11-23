@@ -2,12 +2,7 @@
 build/
 dist/
 .DS_Store
-ios/build/
+.wrangler/
 xcuserdata/
-android/.gradle/
-android/build/
-android/app/build/
-android/local.properties
-android/**/*.jks
-android/**/*.keystore
-android/keystore.properties
+__pycache__/
+*.pyc

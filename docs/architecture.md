@@ -38,8 +38,7 @@ quotlet/
 │   ├── Demo.swift / Snapshot.swift / Showcase.swift # 演示脱敏模式与自动截图工具
 │   └── ProviderAssets/           # 品牌图标（claude.png / codex.png / gemini.png）
 ├── Tests/QuotletTests/           # 单元测试（估算器、通知去重、吞吐计算、FSEvents、Gemini、Hooks、远程指令安全与执行器）
-├── cloud/                        # Quotlet Cloud（Cloudflare Workers + Hono + D1 + Durable Objects）
-└── site/                         # 官方门户静态站点
+└── site/                         # 官方门户静态站点（Cloud / iOS / Android 位于独立私有仓库 quotlet-cloud）
 ```
 
 ### 数据流全景

@@ -130,11 +130,7 @@ Development helpers:
 # Regenerate the README and website screenshots for all five languages
 # (LANGS="zh-Hant" renders just one language, OFFLINE=1 uses cached usage only)
 scripts/make-screenshots.sh
-# Web dashboard screenshots: local D1 + wrangler dev + demo data, nothing touches production
-node cloud/scripts/web-demo.mjs --shots   # or without --shots to browse it at localhost:8789
-# iPhone app screenshots from the simulator's demo mode (needs a booted iPhone simulator)
-scripts/make-ios-screenshots.sh
-# After editing Simplified Chinese text, regenerate Traditional Chinese for the apps,
+# After editing Simplified Chinese text, regenerate Traditional Chinese for the Mac app,
 # the website and README.zh-TW.md (OpenCC s2twp + Taiwan product terms)
 uv run --with opencc python3 scripts/gen-zh-hant.py
 # Open the usage history window right after launch
@@ -160,12 +156,10 @@ swift scripts/make-icon.swift
 | `Views.swift`, `QuickUsage.swift`, `History.swift`, `HistoryStore.swift` | Panel, Sessions/Stats tabs, History window and local archive |
 | `Cloud.swift`, `CloudSync.swift` | Optional GitHub / email-code sign-in and incremental sync to `app.quotlet.com` |
 | `Theme.swift`, `Format.swift`, `Notifier.swift` | Dynamic theme, 5 languages, formatting and quota notifications |
-| `ZhHant.swift`, `ZhHantData.swift`, `scripts/gen-zh-hant.py` | Traditional Chinese: converts Simplified text with a generated lookup table (also used by iOS / Android) |
+| `ZhHant.swift`, `ZhHantData.swift`, `scripts/gen-zh-hant.py` | Traditional Chinese: converts Simplified text with a generated lookup table |
 | `Snapshot.swift`, `Showcase.swift`, `Demo.swift` | Offscreen screenshot, demo-window and sample-data helpers |
-| `cloud/` | Quotlet Cloud: Cloudflare Worker + D1 backend and the web dashboard (`cloud/web/static`) |
-| `ios/`, `android/` | iPhone app (SwiftUI) and Android app (Jetpack Compose) |
 | `Casks/quotlet.rb` | Homebrew cask |
-| `docs/architecture.md`, `docs/cloud-design.md` | System architecture and Cloud design documentation |
+| `docs/architecture.md` | System architecture documentation |
 
 ## License
 
