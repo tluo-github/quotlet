@@ -11,6 +11,7 @@
 <meta property="og:image" content="/assets/panel-en.webp">
 <link rel="icon" href="/assets/icon.png">
 <link rel="apple-touch-icon" href="/assets/icon.png">
+<meta name="apple-itunes-app" content="app-id=6838606835">
 <script>try { const theme = localStorage.getItem('quotlet-theme'); if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme } catch {}</script>
 <link rel="stylesheet" href="/style.css">
 </head>
@@ -61,7 +62,7 @@
         <a class="button primary" data-download="arm64" href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="cta.dmg.arm64">Download Apple Silicon</a>
         <a class="button" data-download="x86_64" href="https://github.com/tluo-github/quotlet/releases/latest" data-i18n="cta.dmg.intel">Download Intel</a>
       </div>
-      <p class="alt"><a href="#install">Homebrew</a><span aria-hidden="true">·</span><button class="ai-link" type="button" data-copy-key="install.ai.prompt" data-i18n="install.ai.t" aria-live="polite">Ask your AI to install it</button></p>
+      <p class="alt"><a href="#install">Homebrew</a><span aria-hidden="true">·</span><button class="ai-link" type="button" data-copy-key="install.ai.prompt" data-i18n="install.ai.t" aria-live="polite">Ask your AI to install it</button><span aria-hidden="true">·</span><a href="https://apps.apple.com/app/id6838606835" target="_blank" rel="noopener" data-i18n="cta.ios">iPhone App (App Store)</a></p>
       <p class="meta"><span data-i18n="hero.meta">macOS 13+ · Apple silicon &amp; Intel · signed &amp; notarized</span> · v{{VERSION}}</p>
       <ul class="stats">
         <li><b>3</b><span data-i18n="stat.providers">providers in one view</span></li>
@@ -130,10 +131,14 @@
     <p class="label"><span data-i18n="cloud.label">Quotlet Cloud</span> <span class="soon" data-i18n="cloud.soon">Optional sync</span></p>
     <h2 data-i18n="cloud.title">The menu bar stays small. The details live on the web.</h2>
     <p class="lead" data-i18n="cloud.lead">Sign in on your Mac, then check everything at app.quotlet.com or in the iPhone app: limits from every Mac, which sessions are running or waiting for you, token trends, and remote commands.</p>
+    <div class="actions cloud-actions">
+      <a class="button primary" href="https://apps.apple.com/app/id6838606835" target="_blank" rel="noopener" data-i18n="cta.appstore">Download on the App Store</a>
+      <a class="button" href="https://app.quotlet.com" target="_blank" rel="noopener" data-i18n="cta.web">Open app.quotlet.com</a>
+    </div>
     <ul class="points wide">
       <li><b data-i18n="cloud.f1.t">Web dashboard</b> <span data-i18n="cloud.f1.d">Quotas for each Mac, live session status, analytics by provider, project and model, 90 days of quota history and in-page alerts. Five languages, light and dark.</span></li>
       <li><b data-i18n="cloud.f2.t">Remote commands</b> <span data-i18n="cloud.f2.d">Send a prompt to Claude Code, Codex or Antigravity on your Mac from the browser or your phone. Off by default, enabled per Mac, limited to projects from the last 30 days, and every command is logged.</span></li>
-      <li><b data-i18n="cloud.f3.t">iPhone app · coming soon</b> <span data-i18n="cloud.f3.d">Overview, sessions, remote commands, analytics and devices in a native app, coming soon to the App Store. An Android version is in the works.</span></li>
+      <li><b data-i18n="cloud.f3.t">iPhone &amp; iPad app</b> <span data-i18n="cloud.f3.d">Overview, sessions, remote commands, analytics and devices in a native iOS app, now on the App Store. An Android version is in the works.</span><a class="point-link" href="https://apps.apple.com/app/id6838606835" target="_blank" rel="noopener" data-i18n="cloud.f3.cta">Get it on the App Store ↗</a></li>
     </ul>
     <div class="strip">
       <figure class="wide"><img data-shot="web-overview" src="/assets/web-overview-en-light.webp" width="1440" height="1328" loading="lazy" alt=""><figcaption data-i18n="shots.web-overview">Web dashboard</figcaption></figure>
@@ -201,7 +206,7 @@ cd quotlet && ./build.sh install</code></pre>
 
 <footer class="foot">
   <p data-i18n="foot.disclaimer">Quotlet is an independent open-source project, not affiliated with Anthropic, OpenAI or Google. Claude, Codex and Gemini are trademarks of their respective owners.</p>
-  <p class="links"><a href="https://github.com/tluo-github/quotlet">GitHub</a> · <a href="https://github.com/tluo-github/quotlet/issues" data-i18n="foot.issues">Issues</a> · <a href="https://github.com/tluo-github/quotlet/blob/main/LICENSE">MIT License</a></p>
+  <p class="links"><a href="https://github.com/tluo-github/quotlet">GitHub</a> · <a href="https://github.com/tluo-github/quotlet/issues" data-i18n="foot.issues">Issues</a> · <a href="https://apps.apple.com/app/id6838606835" target="_blank" rel="noopener" data-i18n="foot.appstore">App Store</a> · <a href="https://github.com/tluo-github/quotlet/blob/main/LICENSE">MIT License</a></p>
 </footer>
 
 </div>
