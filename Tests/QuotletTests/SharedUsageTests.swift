@@ -22,6 +22,33 @@ final class SharedUsageTests: XCTestCase {
         XCTAssertNil(SharedQuotaResolver.newest(rows, provider: "codex", localObservedAt: nil, excludingDevice: "me"))
     }
 
+    func testResolverRejectsStaleSameWindowRemoteSnapshotWithNewerTimestamp() {
+        let now = Date(timeIntervalSince1970: 1200)
+        let resetSeconds: Double = 5000
+        let localLimits = [
+            LimitItem(id: "local-s", kind: "session", title: "5h", percent: 97, severity: nil,
+                      resetsAt: Date(timeIntervalSince1970: resetSeconds))
+        ]
+        // 另一台旧客户端空闲重绘在 t=1200 上传了同窗口的 74%，不能覆盖本机 t=1000 采集到的 97%
+        let staleRemote = [quota("other", "claude", at: 1200, percent: 74, resetsAt: resetSeconds)]
+        XCTAssertNil(SharedQuotaResolver.newest(staleRemote, provider: "claude",
+                                                localObservedAt: Date(timeIntervalSince1970: 1000),
+                                                excludingDevice: "me", localLimits: localLimits, now: now))
+
+        // 另一台 Mac 真正继续使用到了 98%，正常采纳
+        let progressedRemote = [quota("other", "claude", at: 1200, percent: 98, resetsAt: resetSeconds)]
+        XCTAssertEqual(SharedQuotaResolver.newest(progressedRemote, provider: "claude",
+                                                  localObservedAt: Date(timeIntervalSince1970: 1000),
+                                                  excludingDevice: "me", localLimits: localLimits, now: now)?.device_id, "other")
+
+        // 进入下一个新重置窗口（如 2%），正常采纳
+        let nextCycleNow = Date(timeIntervalSince1970: 5100)
+        let nextCycleRemote = [quota("other", "claude", at: 5100, percent: 2, resetsAt: resetSeconds + 18_000)]
+        XCTAssertEqual(SharedQuotaResolver.newest(nextCycleRemote, provider: "claude",
+                                                  localObservedAt: Date(timeIntervalSince1970: 1000),
+                                                  excludingDevice: "me", localLimits: localLimits, now: nextCycleNow)?.device_id, "other")
+    }
+
     func testExpiredSharedWindowShowsZero() {
         let q = quota("a", "codex", at: 1000, percent: 80, resetsAt: 1500)
         let item = q.limitItems(now: Date(timeIntervalSince1970: 2000)).first

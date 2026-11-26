@@ -68,15 +68,31 @@ final class Store: ObservableObject {
 
     /// 本机 Claude 额度的采集时间（接口或 statusLine）；没有本机额度时为 nil
     private var localClaudeObservedAt: Date? {
-        if usageAPIEnabled { return usage == nil ? nil : lastUpdated }
-        if claudeStatusLineEnabled { return ClaudeStatusLineManager.shared.latest?.observedAt }
+        if usageAPIEnabled, usage != nil { return lastUpdated }
+        if claudeStatusLineEnabled { return ClaudeStatusLineManager.shared.latest?.observedAt ?? lastUpdated }
         return nil
     }
 
+    private func localClaudeRawLimits(now: Date) -> [LimitItem] {
+        if !usageAPIEnabled, claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest {
+            return snap.toUsageSnapshot(now: now).limits
+        }
+        return usage?.limits ?? []
+    }
+
     /// 其他 Mac 上报的、比本机更新的额度（同一账号的额度是同一份数据）
-    var sharedClaude: SharedQuota? { SharedCloud.shared.quota(.claude, localObservedAt: localClaudeObservedAt) }
-    var sharedCodex: SharedQuota? { SharedCloud.shared.quota(.codex, localObservedAt: local?.codexLimits?.observedAt) }
-    var sharedGemini: SharedQuota? { SharedCloud.shared.quota(.gemini, localObservedAt: local?.geminiLimits?.observedAt) }
+    var sharedClaude: SharedQuota? {
+        let now = Date()
+        return SharedCloud.shared.quota(.claude, localObservedAt: localClaudeObservedAt, localLimits: localClaudeRawLimits(now: now), now: now)
+    }
+    var sharedCodex: SharedQuota? {
+        let now = Date()
+        return SharedCloud.shared.quota(.codex, localObservedAt: local?.codexLimits?.observedAt, localLimits: local?.codexLimits?.limitItems(now: now) ?? [], now: now)
+    }
+    var sharedGemini: SharedQuota? {
+        let now = Date()
+        return SharedCloud.shared.quota(.gemini, localObservedAt: local?.geminiLimits?.observedAt, localLimits: local?.geminiLimits?.limitItems(now: now) ?? [], now: now)
+    }
     /// 本机或其他 Mac 有 Claude 额度可显示
     var hasClaudeQuotaDisplay: Bool { hasClaudeQuotaSource || sharedClaude != nil }
 
@@ -87,6 +103,50 @@ final class Store: ObservableObject {
         }
         guard let usage else { return nil }
         return quotaEstimator.display(usage, messages: local?.messages ?? [], now: now)
+    }
+
+    /// 将 statusLine 的 5 小时 / 每周额度单调合并进已有快照，保留 API 提供的套餐名、分模型限额与明细。
+    static func mergeStatusLineUsage(_ statusLine: UsageSnapshot, into existing: UsageSnapshot?, now: Date) -> (snapshot: UsageSnapshot, progressed: Bool) {
+        guard let existing else {
+            return (statusLine, !statusLine.limits.isEmpty)
+        }
+        var progressed = false
+        var updatedKinds = Set<String>()
+        var mergedLimits: [LimitItem] = existing.limits.map { oldItem in
+            guard oldItem.kind == "session" || oldItem.kind == "weekly_all",
+                  let incItem = statusLine.limits.first(where: { $0.kind == oldItem.kind }) else {
+                return oldItem
+            }
+            updatedKinds.insert(oldItem.kind)
+            let oldWin = ClaudeStatusLineWindow(usedPercentage: oldItem.percent, resetsAt: oldItem.resetsAt)
+            let incWin = ClaudeStatusLineWindow(usedPercentage: incItem.percent, resetsAt: incItem.resetsAt)
+            let res = ClaudeStatusLineWindow.merge(existing: oldWin, incoming: incWin, now: now)
+            if res.acceptedIncoming, let win = res.window {
+                progressed = true
+                return LimitItem(id: oldItem.id, kind: oldItem.kind, title: incItem.title,
+                                 percent: win.usedPercentage, severity: incItem.severity ?? oldItem.severity,
+                                 resetsAt: win.resetsAt, scope: oldItem.scope, detail: oldItem.detail)
+            }
+            // 语言切换时保留数值但同步最新标题
+            if oldItem.title != incItem.title {
+                return LimitItem(id: oldItem.id, kind: oldItem.kind, title: incItem.title,
+                                 percent: oldItem.percent, severity: oldItem.severity,
+                                 resetsAt: oldItem.resetsAt, scope: oldItem.scope, detail: oldItem.detail)
+            }
+            return oldItem
+        }
+        for incItem in statusLine.limits where !updatedKinds.contains(incItem.kind) {
+            mergedLimits.append(incItem)
+            progressed = true
+        }
+        let merged = UsageSnapshot(
+            limits: mergedLimits,
+            breakdown: existing.breakdown,
+            breakdownStart: existing.breakdownStart,
+            extra: existing.extra,
+            plan: existing.plan ?? statusLine.plan
+        )
+        return (merged, progressed)
     }
 
     func setClaudeStatusLineEnabled(_ on: Bool) {
@@ -106,23 +166,25 @@ final class Store: ObservableObject {
 
     private func applyStatusLineSnapshot(_ snap: ClaudeStatusLineSnapshot, force: Bool = false) {
         guard claudeStatusLineEnabled else { return }
-        if !force, usageAPIEnabled, let current = lastUpdated, snap.observedAt < current {
-            return
-        }
         let now = Date()
         let converted = snap.toUsageSnapshot(now: now)
         guard !converted.limits.isEmpty else { return }
-        usage = converted
-        lastUpdated = snap.observedAt
+
+        let base = (!force && usageAPIEnabled) ? usage : (force ? nil : usage)
+        let (merged, progressed) = Self.mergeStatusLineUsage(converted, into: base, now: now)
+        guard force || progressed || usage == nil else { return }
+
+        usage = merged
+        lastUpdated = lastUpdated.map { max($0, snap.observedAt) } ?? snap.observedAt
         if !usageAPIEnabled {
             errorMessage = nil
             needsCredentialAuthorization = false
             needsProxyHint = false
         }
-        quotaEstimator.observe(converted, at: snap.observedAt, messages: local?.messages ?? [])
-        Notifier.shared.evaluate(converted)
-        CloudSync.shared.usageUpdated(converted, at: snap.observedAt)
-        HistoryStore.shared.record(provider: "claude", items: converted.limits, at: snap.observedAt)
+        quotaEstimator.observe(merged, at: snap.observedAt, messages: local?.messages ?? [])
+        Notifier.shared.evaluate(merged)
+        CloudSync.shared.usageUpdated(merged, at: snap.observedAt)
+        HistoryStore.shared.record(provider: "claude", items: merged.limits, at: snap.observedAt)
     }
 
     @Published private(set) var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -159,8 +221,16 @@ final class Store: ObservableObject {
             if language.isEmpty { UserDefaults.standard.removeObject(forKey: "language") }
             else { UserDefaults.standard.set(language, forKey: "language") }
             // 额度标题是解析时按语言生成的：先用缓存按新语言重新解析，再去网络刷新
-            if usageAPIEnabled, let (cached, _) = UsageCache.load() { usage = cached }
-            else if claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest { usage = snap.toUsageSnapshot(now: Date()) }
+            if usageAPIEnabled, let (cached, _) = UsageCache.load() {
+                if claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest {
+                    let now = Date()
+                    usage = Self.mergeStatusLineUsage(snap.toUsageSnapshot(now: now), into: cached, now: now).snapshot
+                } else {
+                    usage = cached
+                }
+            } else if claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest {
+                usage = snap.toUsageSnapshot(now: Date())
+            }
             refreshUsage()
         }
     }
@@ -237,12 +307,17 @@ final class Store: ObservableObject {
         let initialAppearance = appearance
         DispatchQueue.main.async { Self.applyAppearance(initialAppearance) }
 
-        // 先显示上次缓存的数据，再去网络刷新
+        // 先显示上次缓存的数据，再去网络刷新；若同时开了免钥匙串 statusLine，再把更新的本机快照合并进来
         if usageAPIEnabled, let (cached, date) = UsageCache.load() {
             usage = cached
             lastUpdated = date
             quotaEstimator.observe(cached, at: date, messages: [])
-            CloudSync.shared.usageUpdated(cached, at: date)
+            if claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest {
+                applyStatusLineSnapshot(snap)
+            }
+            if let current = usage, let updatedAt = lastUpdated {
+                CloudSync.shared.usageUpdated(current, at: updatedAt)
+            }
         } else if claudeStatusLineEnabled, let snap = ClaudeStatusLineManager.shared.latest {
             applyStatusLineSnapshot(snap, force: true)
         }
@@ -392,10 +467,16 @@ final class Store: ObservableObject {
         usageTask = Task {
             defer { if generation == apiGeneration { isLoading = false } }
             do {
-                let fresh = try await UsageAPI.fetch(allowInteraction: allowInteraction)
+                let apiSnap = try await UsageAPI.fetch(allowInteraction: allowInteraction)
                 let observedAt = Date()
                 let sample = await scanner.scan(days: Self.scanDays)
                 guard !Task.isCancelled, usageAPIEnabled, generation == apiGeneration else { return }
+                let fresh: UsageSnapshot
+                if claudeStatusLineEnabled, let sl = ClaudeStatusLineManager.shared.latest {
+                    fresh = Self.mergeStatusLineUsage(sl.toUsageSnapshot(now: observedAt), into: apiSnap, now: observedAt).snapshot
+                } else {
+                    fresh = apiSnap
+                }
                 quotaEstimator.observe(fresh, at: observedAt, messages: sample.messages)
                 usage = fresh
                 lastUpdated = observedAt
@@ -461,10 +542,16 @@ final class Store: ObservableObject {
             defer { if generation == apiGeneration { isTesting = false } }
             let start = Date()
             do {
-                let fresh = try await UsageAPI.fetch(allowFallback: false)
+                let apiSnap = try await UsageAPI.fetch(allowFallback: false)
                 let observedAt = Date()
                 let sample = await scanner.scan(days: Self.scanDays)
                 guard !Task.isCancelled, usageAPIEnabled, generation == apiGeneration else { return }
+                let fresh: UsageSnapshot
+                if claudeStatusLineEnabled, let sl = ClaudeStatusLineManager.shared.latest {
+                    fresh = Self.mergeStatusLineUsage(sl.toUsageSnapshot(now: observedAt), into: apiSnap, now: observedAt).snapshot
+                } else {
+                    fresh = apiSnap
+                }
                 quotaEstimator.observe(fresh, at: observedAt, messages: sample.messages)
                 usage = fresh
                 lastUpdated = observedAt

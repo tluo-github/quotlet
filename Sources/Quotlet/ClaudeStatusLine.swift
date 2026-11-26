@@ -11,8 +11,72 @@ import Foundation
 //    CloudSync、HistoryStore 与 Notifier，全程零钥匙串访问、零额外网络请求。
 
 struct ClaudeStatusLineWindow: Codable, Equatable {
+    /// 同一额度窗口的重置时间在服务端可能存在数十秒到两三分钟的取整抖动，
+    /// 而真正的新周期会向后推进约 5 小时或 7 天。
+    static let sameWindowTolerance: TimeInterval = 300
+
     let usedPercentage: Double
     let resetsAt: Date?
+
+    /// 合并已有窗口与新收到的窗口，防止另一个空闲 Claude Code 终端重绘旧的 statusLine 缓存导致额度回退（如 97% -> 74%）。
+    /// 返回合并后的窗口，以及是否采纳了 incoming 的新进度。
+    static func merge(existing: ClaudeStatusLineWindow?,
+                      incoming: ClaudeStatusLineWindow?,
+                      now: Date) -> (window: ClaudeStatusLineWindow?, acceptedIncoming: Bool) {
+        guard let inc = incoming else { return (existing, false) }
+        guard let old = existing else { return (inc, true) }
+
+        let oldExpired = old.resetsAt.map { $0 <= now } ?? false
+        let incExpired = inc.resetsAt.map { $0 <= now } ?? false
+
+        // 旧窗口已过重置时间：新数据只要处于未过期的新周期即采纳；若两者都已过期则保持原样，避免空闲重绘刷新时间戳。
+        if oldExpired {
+            if let incReset = inc.resetsAt, incReset > now { return (inc, true) }
+            if inc.resetsAt == nil && inc.usedPercentage == 0 && old.usedPercentage != 0 { return (inc, true) }
+            return (old, false)
+        }
+        // 当前窗口仍在有效期内，而新传入的是已过期的旧窗口：忽略旧数据。
+        if incExpired {
+            return (old, false)
+        }
+
+        switch (old.resetsAt, inc.resetsAt) {
+        case let (oldReset?, incReset?):
+            let delta = incReset.timeIntervalSince(oldReset)
+            if delta > sameWindowTolerance {
+                // 重置时间明显推进，说明进入了下一个新周期（即使新百分比更小也应采纳）
+                return (inc, true)
+            }
+            if delta < -sameWindowTolerance {
+                // 来自更早周期的滞后缓存
+                return (old, false)
+            }
+            // 同一额度周期内：已用百分比单调不减，仅在进度真正增长时采纳并推进 observedAt
+            if inc.usedPercentage > old.usedPercentage {
+                return (inc, true)
+            }
+            return (old, false)
+
+        case let (oldReset?, nil):
+            if inc.usedPercentage > old.usedPercentage {
+                return (ClaudeStatusLineWindow(usedPercentage: inc.usedPercentage, resetsAt: oldReset), true)
+            }
+            return (old, false)
+
+        case (nil, _?):
+            if inc.usedPercentage >= old.usedPercentage {
+                return (inc, true)
+            }
+            let merged = ClaudeStatusLineWindow(usedPercentage: old.usedPercentage, resetsAt: inc.resetsAt)
+            return (merged, merged != old)
+
+        case (nil, nil):
+            if inc.usedPercentage > old.usedPercentage {
+                return (inc, true)
+            }
+            return (old, false)
+        }
+    }
 }
 
 struct ClaudeStatusLineSnapshot: Codable, Equatable {
@@ -23,6 +87,24 @@ struct ClaudeStatusLineSnapshot: Codable, Equatable {
     let sessionId: String?
 
     var hasAnyLimit: Bool { fiveHour != nil || sevenDay != nil }
+
+    /// 将新收到的快照与当前快照合并：
+    /// - 过滤其他空闲终端会话重绘 statusLine 时携带的同周期低百分比或旧周期缓存
+    /// - 若两项额度均无新进展（如终端缩放重绘），保留原快照与原 observedAt，避免无意义写盘和虚假刷新时间
+    func merging(_ incoming: ClaudeStatusLineSnapshot, now: Date) -> ClaudeStatusLineSnapshot {
+        let five = ClaudeStatusLineWindow.merge(existing: fiveHour, incoming: incoming.fiveHour, now: now)
+        let seven = ClaudeStatusLineWindow.merge(existing: sevenDay, incoming: incoming.sevenDay, now: now)
+        guard five.acceptedIncoming || seven.acceptedIncoming else {
+            return self
+        }
+        return ClaudeStatusLineSnapshot(
+            observedAt: max(observedAt, incoming.observedAt),
+            fiveHour: five.window,
+            sevenDay: seven.window,
+            modelName: incoming.modelName ?? modelName,
+            sessionId: incoming.sessionId ?? sessionId
+        )
+    }
 
     func toUsageSnapshot(now: Date = Date()) -> UsageSnapshot {
         var limits: [LimitItem] = []
@@ -83,7 +165,7 @@ enum ClaudeStatusLineCLI {
                     now: Date = Date()) {
         let data = stdinData ?? readStdinUpTo(limit: maxStdinBytes)
         if let snap = parseSnapshot(from: data, now: now) {
-            saveSnapshot(snap, to: snapshotURL)
+            upsertSnapshot(snap, to: snapshotURL, now: now)
         }
         forwardToWrappedCommandIfNeeded(stdinData: data, wrappedConfigURL: wrappedConfigURL)
     }
@@ -131,6 +213,46 @@ enum ClaudeStatusLineCLI {
             return Fmt.parseISO(str)
         }
         return nil
+    }
+
+    /// 加文件锁读取已有快照并单调合并后落盘，避免多终端同时触发 statusLine（如窗口缩放 SIGWINCH）产生竞态覆盖。
+    @discardableResult
+    static func upsertSnapshot(_ incoming: ClaudeStatusLineSnapshot,
+                               to url: URL = ClaudeStatusLinePaths.snapshotURL,
+                               now: Date = Date()) -> ClaudeStatusLineSnapshot {
+        let fm = FileManager.default
+        let dir = url.deletingLastPathComponent()
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let lockURL = dir.appendingPathComponent(".claude-statusline.lock")
+        let lockFD = open(lockURL.path, O_CREAT | O_RDWR, 0o600)
+        var locked = false
+        if lockFD >= 0 {
+            for _ in 0..<20 {
+                if flock(lockFD, LOCK_EX | LOCK_NB) == 0 {
+                    locked = true
+                    break
+                }
+                usleep(2_000)
+            }
+        }
+        defer {
+            if lockFD >= 0 {
+                if locked { _ = flock(lockFD, LOCK_UN) }
+                close(lockFD)
+            }
+        }
+
+        if let existing = loadSnapshot(from: url) {
+            let merged = existing.merging(incoming, now: now)
+            if merged != existing {
+                saveSnapshot(merged, to: url)
+            }
+            return merged
+        } else {
+            saveSnapshot(incoming, to: url)
+            return incoming
+        }
     }
 
     static func saveSnapshot(_ snapshot: ClaudeStatusLineSnapshot, to url: URL) {
@@ -379,8 +501,8 @@ struct ClaudeStatusLineInstaller {
 final class ClaudeStatusLineManager: ObservableObject {
     static let shared = ClaudeStatusLineManager()
 
-    static let enabledKey = "claudeStatusLineEnabled"
-    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+    nonisolated static let enabledKey = "claudeStatusLineEnabled"
+    nonisolated static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
         defaults.bool(forKey: enabledKey)
     }
 
@@ -461,7 +583,8 @@ final class ClaudeStatusLineManager: ObservableObject {
     }
 
     func reloadFromDisk(notify: Bool = true) {
-        guard let snap = ClaudeStatusLineCLI.loadSnapshot() else { return }
+        guard let disk = ClaudeStatusLineCLI.loadSnapshot() else { return }
+        let snap = latest.map { $0.merging(disk, now: Date()) } ?? disk
         let changed = snap != latest
         latest = snap
         if notify && changed {

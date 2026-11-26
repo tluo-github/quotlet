@@ -39,7 +39,7 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         guard let center, !Cloud.isPreview else { return }
         center.delegate = self
         if !UserDefaults.standard.bool(forKey: Key.reset) { cancelResetReminders() }
-        else if !UsageAPI.isEnabled() { cancelResetReminders(provider: "Claude") }
+        else if !UsageAPI.isEnabled() && !ClaudeStatusLineManager.isEnabled() { cancelResetReminders(provider: "Claude") }
         let d = UserDefaults.standard
         guard d.bool(forKey: Key.low) || d.bool(forKey: Key.full) || d.bool(forKey: Key.reset) else { return }
         center.getNotificationSettings { settings in

@@ -285,4 +285,134 @@ final class HooksAndCapabilitiesTests: XCTestCase {
         XCTAssertEqual(sl["command"] as? String, "cat | sed 's/Opus/CUSTOM_OPUS/'")
         XCTAssertEqual(sl["padding"] as? Int, 2)
     }
+
+    func testStatusLineIgnoresStaleIdleSessionAndAdvancesOnNewProgressOrCycle() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("quotlet-statusline-merge-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let snapshotURL = dir.appendingPathComponent("limits.json")
+        let wrappedURL = dir.appendingPathComponent("wrapped.json")
+
+        let t1 = Date(timeIntervalSince1970: 1_795_663_000)
+        let fiveReset: Int = 1_795_669_200   // Today 13:00
+        let sevenReset: Int = 1_795_892_400  // Sunday 03:00
+
+        func makePayload(session: String, fivePct: Double, fiveResetsAt: Int, sevenPct: Double, sevenResetsAt: Int) -> Data {
+            """
+            {
+              "session_id": "\(session)",
+              "model": { "display_name": "Opus 5.5" },
+              "rate_limits": {
+                "five_hour": { "used_percentage": \(fivePct), "resets_at": \(fiveResetsAt) },
+                "seven_day": { "used_percentage": \(sevenPct), "resets_at": \(sevenResetsAt) }
+              }
+            }
+            """.data(using: .utf8)!
+        }
+
+        // 1. Active Claude Code session reaches 97% / 53%
+        let active97 = makePayload(session: "sess-active", fivePct: 97, fiveResetsAt: fiveReset, sevenPct: 53, sevenResetsAt: sevenReset)
+        ClaudeStatusLineCLI.run(stdinData: active97, snapshotURL: snapshotURL, wrappedConfigURL: wrappedURL, now: t1)
+
+        var loaded = try XCTUnwrap(ClaudeStatusLineCLI.loadSnapshot(from: snapshotURL))
+        XCTAssertEqual(loaded.fiveHour?.usedPercentage, 97)
+        XCTAssertEqual(loaded.sevenDay?.usedPercentage, 53)
+        XCTAssertEqual(loaded.sessionId, "sess-active")
+        XCTAssertEqual(loaded.observedAt.timeIntervalSince1970, t1.timeIntervalSince1970, accuracy: 0.002)
+
+        // 2. Another idle terminal tab redraws its statusLine with cached 74% / 50% for the same window -> MUST NOT regress or bump observedAt
+        let t2 = t1.addingTimeInterval(20)
+        let idle74 = makePayload(session: "sess-idle", fivePct: 74, fiveResetsAt: fiveReset, sevenPct: 50, sevenResetsAt: sevenReset)
+        ClaudeStatusLineCLI.run(stdinData: idle74, snapshotURL: snapshotURL, wrappedConfigURL: wrappedURL, now: t2)
+
+        loaded = try XCTUnwrap(ClaudeStatusLineCLI.loadSnapshot(from: snapshotURL))
+        XCTAssertEqual(loaded.fiveHour?.usedPercentage, 97)
+        XCTAssertEqual(loaded.sevenDay?.usedPercentage, 53)
+        XCTAssertEqual(loaded.sessionId, "sess-active")
+        XCTAssertEqual(loaded.observedAt.timeIntervalSince1970, t1.timeIntervalSince1970, accuracy: 0.002)
+
+        // 3. Same active session redraws on terminal resize without quota change -> observedAt stays at t1
+        let t3 = t1.addingTimeInterval(40)
+        ClaudeStatusLineCLI.run(stdinData: active97, snapshotURL: snapshotURL, wrappedConfigURL: wrappedURL, now: t3)
+        loaded = try XCTUnwrap(ClaudeStatusLineCLI.loadSnapshot(from: snapshotURL))
+        XCTAssertEqual(loaded.observedAt.timeIntervalSince1970, t1.timeIntervalSince1970, accuracy: 0.002)
+
+        // 4. Active session progresses to 99% / 54% (with slight server reset-time jitter) -> updates cleanly
+        let t4 = t1.addingTimeInterval(90)
+        let active99 = makePayload(session: "sess-active", fivePct: 99, fiveResetsAt: fiveReset + 30, sevenPct: 54, sevenResetsAt: sevenReset)
+        ClaudeStatusLineCLI.run(stdinData: active99, snapshotURL: snapshotURL, wrappedConfigURL: wrappedURL, now: t4)
+
+        loaded = try XCTUnwrap(ClaudeStatusLineCLI.loadSnapshot(from: snapshotURL))
+        XCTAssertEqual(loaded.fiveHour?.usedPercentage, 99)
+        XCTAssertEqual(loaded.sevenDay?.usedPercentage, 54)
+        XCTAssertEqual(loaded.observedAt.timeIntervalSince1970, t4.timeIntervalSince1970, accuracy: 0.002)
+
+        // 5. After 5-hour window resets, a new turn starts the next 5-hour cycle at 2% -> replaces 99% while keeping 54% weekly
+        let t5 = Date(timeIntervalSince1970: TimeInterval(fiveReset + 300))
+        let nextFiveReset = fiveReset + 18_000
+        let newCycle = makePayload(session: "sess-next", fivePct: 2, fiveResetsAt: nextFiveReset, sevenPct: 54, sevenResetsAt: sevenReset)
+        ClaudeStatusLineCLI.run(stdinData: newCycle, snapshotURL: snapshotURL, wrappedConfigURL: wrappedURL, now: t5)
+
+        loaded = try XCTUnwrap(ClaudeStatusLineCLI.loadSnapshot(from: snapshotURL))
+        XCTAssertEqual(loaded.fiveHour?.usedPercentage, 2)
+        XCTAssertEqual(loaded.fiveHour?.resetsAt?.timeIntervalSince1970 ?? 0, Double(nextFiveReset), accuracy: 1)
+        XCTAssertEqual(loaded.sevenDay?.usedPercentage, 54)
+        XCTAssertEqual(loaded.sessionId, "sess-next")
+
+        // 6. Old idle terminal STILL holding expired 13:00 (74%) + stale 50% weekly redraws after reset -> ignored completely
+        let t6 = t5.addingTimeInterval(60)
+        ClaudeStatusLineCLI.run(stdinData: idle74, snapshotURL: snapshotURL, wrappedConfigURL: wrappedURL, now: t6)
+
+        loaded = try XCTUnwrap(ClaudeStatusLineCLI.loadSnapshot(from: snapshotURL))
+        XCTAssertEqual(loaded.fiveHour?.usedPercentage, 2)
+        XCTAssertEqual(loaded.fiveHour?.resetsAt?.timeIntervalSince1970 ?? 0, Double(nextFiveReset), accuracy: 1)
+        XCTAssertEqual(loaded.sevenDay?.usedPercentage, 54)
+    }
+
+    @MainActor
+    func testStoreMergeStatusLinePreservesAPIMetadataAndRejectsRegression() {
+        let now = Date(timeIntervalSince1970: 1_795_663_000)
+        let fiveReset = Date(timeIntervalSince1970: 1_795_669_200)
+        let sevenReset = Date(timeIntervalSince1970: 1_795_892_400)
+
+        let apiSnap = UsageSnapshot(
+            limits: [
+                LimitItem(id: "s", kind: "session", title: "5h", percent: 85, severity: "normal", resetsAt: fiveReset),
+                LimitItem(id: "w", kind: "weekly_all", title: "Week", percent: 52, severity: "normal", resetsAt: sevenReset),
+                LimitItem(id: "ws", kind: "weekly_scoped", title: "Sonnet", percent: 15, severity: nil, resetsAt: sevenReset, scope: "Sonnet"),
+            ],
+            breakdown: [BreakdownRow(id: "claude_code", name: "Claude Code", percent: 90)],
+            breakdownStart: now.addingTimeInterval(-86_400),
+            extra: ExtraUsageInfo(enabled: false, used: 10, limit: 50, currency: "USD"),
+            plan: "pro"
+        )
+
+        let freshStatusLine = UsageSnapshot(
+            limits: [
+                LimitItem(id: "sl-s", kind: "session", title: "5h", percent: 97, severity: nil, resetsAt: fiveReset),
+                LimitItem(id: "sl-w", kind: "weekly_all", title: "Week", percent: 54, severity: nil, resetsAt: sevenReset),
+            ],
+            breakdown: [], breakdownStart: nil, extra: nil, plan: nil
+        )
+        let merged = Store.mergeStatusLineUsage(freshStatusLine, into: apiSnap, now: now)
+        XCTAssertTrue(merged.progressed)
+        XCTAssertEqual(merged.snapshot.session?.percent, 97)
+        XCTAssertEqual(merged.snapshot.weekly?.percent, 54)
+        XCTAssertEqual(merged.snapshot.plan, "pro")
+        XCTAssertEqual(merged.snapshot.limits.count, 3)
+        XCTAssertEqual(merged.snapshot.breakdown.count, 1)
+
+        let staleStatusLine = UsageSnapshot(
+            limits: [
+                LimitItem(id: "sl-s", kind: "session", title: "5h", percent: 74, severity: nil, resetsAt: fiveReset),
+                LimitItem(id: "sl-w", kind: "weekly_all", title: "Week", percent: 50, severity: nil, resetsAt: sevenReset),
+            ],
+            breakdown: [], breakdownStart: nil, extra: nil, plan: nil
+        )
+        let afterStale = Store.mergeStatusLineUsage(staleStatusLine, into: merged.snapshot, now: now)
+        XCTAssertFalse(afterStale.progressed)
+        XCTAssertEqual(afterStale.snapshot.session?.percent, 97)
+        XCTAssertEqual(afterStale.snapshot.weekly?.percent, 54)
+    }
 }

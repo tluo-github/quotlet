@@ -62,6 +62,7 @@ final class Cloud: ObservableObject {
     /// 正在浏览器里登录：等 quotlet://auth 回调。只存在内存里，app 重启就作废，重新点登录即可。
     private var pending: (state: String, verifier: String, started: Date)?
     private static let userKey = "cloudUser"
+    private static let deviceIdKey = "cloudDeviceId"
 
     private init() {
         // 截图 / 演示模式：不读钥匙串（开发版每次重编译都会触发钥匙串授权弹窗），也不露出真实账号。
@@ -86,6 +87,7 @@ final class Cloud: ObservableObject {
            let u = try? JSONDecoder().decode(CloudUser.self, from: data) {
             token = CloudToken.load()
             if token != nil {
+                deviceId = UserDefaults.standard.string(forKey: Self.deviceIdKey)
                 user = u
                 Task { await refreshMe() }
             }
@@ -197,6 +199,7 @@ final class Cloud: ObservableObject {
            let u = try? JSONDecoder().decode(CloudUser.self, from: userData) {
             if let dev = root["device"] as? [String: Any], let id = dev["id"] as? String {
                 deviceId = id
+                UserDefaults.standard.set(id, forKey: Self.deviceIdKey)
             }
             setUser(u)
         }
@@ -212,6 +215,7 @@ final class Cloud: ObservableObject {
         CloudToken.delete()
         token = nil
         deviceId = nil
+        UserDefaults.standard.removeObject(forKey: Self.deviceIdKey)
         setUser(nil)
         HookManager.shared.handleSignedOut()
         RemoteCommandManager.shared.handleSignedOut()

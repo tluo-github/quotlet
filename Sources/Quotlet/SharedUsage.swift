@@ -70,16 +70,61 @@ struct SharedOverview: Decodable {
 }
 
 enum SharedQuotaResolver {
-    /// 返回比本机更新的其他 Mac 快照；本机更新或没有其他 Mac 的数据时返回 nil（用本机数据）。
+    /// 返回比本机更新的其他 Mac 快照；本机更新、没有其他 Mac 数据、或远端数据在同一周期内反而落后于本机时返回 nil（用本机数据）。
     static func newest(_ rows: [SharedQuota], provider: String, account: String = "default",
-                       localObservedAt: Date?, excludingDevice: String?) -> SharedQuota? {
-        let candidate = rows.filter {
+                       localObservedAt: Date?, excludingDevice: String?,
+                       localLimits: [LimitItem] = [], now: Date = Date()) -> SharedQuota? {
+        let others = rows.filter {
             $0.provider == provider && ($0.account_key ?? "default") == account && !$0.limits.isEmpty
                 && $0.device_id != excludingDevice
-        }.max { $0.fetched_at < $1.fetched_at }
-        guard let candidate else { return nil }
+        }
+        guard !others.isEmpty else { return nil }
+        // 过滤掉被其他设备更新进度超越的滞后行（防止某台旧版 Mac 空闲重绘上传了同周期更低百分比但时间戳更新的快照）
+        let nonRegressed = others.filter { row in
+            let rowItems = row.limitItems(now: now)
+            return !others.contains { other in
+                other.device_id != row.device_id && isStale(candidate: rowItems, comparedTo: other.limitItems(now: now), now: now)
+            }
+        }
+        guard let candidate = (nonRegressed.isEmpty ? others : nonRegressed).max(by: { $0.fetched_at < $1.fetched_at }) else {
+            return nil
+        }
+        if !localLimits.isEmpty, isStale(candidate: candidate.limitItems(now: now), comparedTo: localLimits, now: now) {
+            return nil
+        }
         if let localObservedAt, candidate.observedAt.timeIntervalSince(localObservedAt) <= 0.001 { return nil }
         return candidate
+    }
+
+    /// 判断 candidate 相对于 reference 是否属于滞后的旧读数（更早的重置周期，或同一未过期周期内百分比更低且没有任何窗口领先）。
+    static func isStale(candidate: [LimitItem], comparedTo reference: [LimitItem], now: Date) -> Bool {
+        let tolerance = ClaudeStatusLineWindow.sameWindowTolerance
+        var sawRegression = false
+        var sawProgression = false
+
+        for ref in reference where ref.kind == "session" || ref.kind == "weekly_all" {
+            let refExpired = ref.resetsAt.map { $0 <= now } ?? false
+            guard !refExpired else { continue }
+            guard let cand = candidate.first(where: { $0.kind == ref.kind && $0.scope == ref.scope }) else { continue }
+
+            if let refReset = ref.resetsAt, let candReset = cand.resetsAt {
+                let delta = candReset.timeIntervalSince(refReset)
+                if delta < -tolerance {
+                    sawRegression = true
+                } else if delta > tolerance {
+                    sawProgression = true
+                } else if cand.percent < ref.percent {
+                    sawRegression = true
+                } else if cand.percent > ref.percent {
+                    sawProgression = true
+                }
+            } else if ref.resetsAt != nil && cand.resetsAt == nil && cand.percent < ref.percent {
+                sawRegression = true
+            } else if cand.percent > ref.percent {
+                sawProgression = true
+            }
+        }
+        return sawRegression && !sawProgression
     }
 }
 
@@ -116,10 +161,11 @@ final class SharedCloud: ObservableObject {
     /// 跨设备合并只在多台 Mac 时有意义
     var hasOtherMacs: Bool { macCount > 1 }
 
-    func quota(_ provider: Source, localObservedAt: Date?) -> SharedQuota? {
+    func quota(_ provider: Source, localObservedAt: Date?, localLimits: [LimitItem] = [], now: Date = Date()) -> SharedQuota? {
         guard CloudSync.shared.isActive else { return nil }
         return SharedQuotaResolver.newest(quotas, provider: provider.rawValue,
-                                          localObservedAt: localObservedAt, excludingDevice: Cloud.shared.deviceId)
+                                          localObservedAt: localObservedAt, excludingDevice: Cloud.shared.deviceId,
+                                          localLimits: localLimits, now: now)
     }
 
     /// 只有今天的日期与本机一致时才用（跨过午夜后等下一次拉取）
