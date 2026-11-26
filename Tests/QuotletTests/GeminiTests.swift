@@ -262,12 +262,15 @@ final class GeminiTests: XCTestCase {
             LimitItem(id: "x-wk", kind: "weekly_all", title: "wk", percent: 98, severity: nil, resetsAt: reset),
         ]
         let gemini = [
-            LimitItem(id: "g-5h", kind: "session", title: "5h", percent: 2.5, severity: nil, resetsAt: reset),
+            LimitItem(id: "g-5h", kind: "session", title: "5h", percent: 2.5, severity: nil, resetsAt: reset,
+                      isEstimated: true),
             LimitItem(id: "g-wk", kind: "weekly_all", title: "wk", percent: 0.7, severity: nil, resetsAt: reset),
         ]
         let advice = Advice.make(claude: claude, codex: codex, gemini: gemini, now: now, threshold: 90)
         XCTAssertNotNil(advice)
         XCTAssertTrue(advice?.title.contains("Gemini") == true)
+        XCTAssertTrue(advice?.badge.contains("97.5%") == true)
+        XCTAssertFalse(advice?.badge.contains("≈") == true)
         XCTAssertTrue(advice?.reason.contains("Claude") == true)
         XCTAssertTrue(advice?.reason.contains("Codex") == true)
     }

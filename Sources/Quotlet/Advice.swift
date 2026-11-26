@@ -22,12 +22,12 @@ struct Advice {
         }
         func left(_ items: [LimitItem]) -> String {
             if let five = items.first(where: { $0.kind == "session" }) {
-                let percent = (five.isEstimated ? "≈" : "") + Fmt.percent(max(0, 100 - five.percent))
+                let percent = Fmt.percent(max(0, 100 - five.percent))
                 return L("5 小时还剩 \(percent)", "\(percent) left in 5h",
                          ja: "5 時間枠の残り \(percent)", ko: "5시간 \(percent) 남음")
             }
             let week = items.first(where: { $0.kind == "weekly_all" })!
-            let percent = (week.isEstimated ? "≈" : "") + Fmt.percent(max(0, 100 - week.percent))
+            let percent = Fmt.percent(max(0, 100 - week.percent))
             return L("本周还剩 \(percent)", "\(percent) left this week",
                      ja: "今週枠の残り \(percent)", ko: "이번 주 \(percent) 남음")
         }

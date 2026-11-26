@@ -18,7 +18,7 @@ struct LimitItem: Identifiable {
     var isEstimated = false
 
     var percentText: String {
-        isEstimated ? "≈" + String(format: "%.1f%%", percent) : Fmt.percent(percent)
+        isEstimated ? String(format: "%.1f%%", percent) : Fmt.percent(percent)
     }
 }
 

@@ -93,17 +93,17 @@
     <h2 data-i18n="how.title">Local updates between quota refreshes.</h2>
     <p class="lead" data-i18n="how.lead">Quotlet watches Claude Code, Codex and Antigravity (Gemini) logs on your Mac. Codex quotas come from local logs, Gemini quotas from Antigravity's local service, and optional Claude API readings refresh every 10 minutes with local estimates in between.</p>
     <div class="split">
-      <pre class="term" aria-label="Example quota estimate"><span class="dim">5h  </span> <span class="ok">██████████</span><span class="tick">│</span><span class="ok">█</span><span class="track">░░░░░░░</span>  <b>≈56.4%</b>   <span class="dim">3h 6m</span>
+      <pre class="term" aria-label="Example quota estimate"><span class="dim">5h  </span> <span class="ok">██████████</span><span class="tick">│</span><span class="ok">█</span><span class="track">░░░░░░░</span>  <b>56.4%</b>   <span class="dim">3h 6m</span>
       <span class="dim">Resets</span> <span class="time">today 10:30</span>
-      <span class="dim">≈ Estimated from new local tokens</span>
+      <span class="dim">Estimated from new local tokens</span>
 
-<span class="dim">week</span> <span class="bad">█████████</span><span class="tick">│</span><span class="bad">██████</span><span class="track">░░░</span>  <b>≈90.2%</b>   <span class="dim">3d 19h</span>
+<span class="dim">week</span> <span class="bad">█████████</span><span class="tick">│</span><span class="bad">██████</span><span class="track">░░░</span>  <b>90.2%</b>   <span class="dim">3d 19h</span>
       <span class="dim">Resets</span> <span class="time">Sunday 3:00</span>
 
 <span class="dim">Claude API refresh · every 10 minutes by default</span></pre>
       <ul class="points">
         <li><b data-i18n="how.p1.t">Local logs &amp; services update fast.</b> <span data-i18n="how.p1.d">New session records update tokens, speed and quotas in about a second. Codex reads local logs; Gemini queries Antigravity's local service on 127.0.0.1 and caches the last reading.</span></li>
-        <li><b data-i18n="how.p2.t">Claude estimates fill the gaps.</b> <span data-i18n="how.p2.d">After at least two valid readings in the same window, new local Claude tokens estimate quota usage with a ≈ mark, corrected on the next API refresh. Models, caching and other devices affect accuracy.</span></li>
+        <li><b data-i18n="how.p2.t">Claude estimates fill the gaps.</b> <span data-i18n="how.p2.d">After at least two valid readings in the same window, new local Claude tokens estimate quota usage until the next API refresh. Models, caching and other devices affect accuracy.</span></li>
         <li><b data-i18n="how.p3.t">Alerts cover all three providers.</b> <span data-i18n="how.p3.d">Alerts default to on at 90%, at 100% and after reset across Claude, Codex and Gemini — including Claude estimates. Allow macOS notifications when prompted.</span></li>
       </ul>
     </div>
@@ -116,7 +116,7 @@
       <article><p class="card-label" data-i18n="f1.k">Menu bar</p><h3 data-i18n="f1.t">Always in sight</h3><p data-i18n="f1.d">Pick Claude, Codex or Gemini for the menu bar: "5h 41% · Wk 62%" or compact "41% 62%". Switch sources right from the panel.</p></article>
       <article><p class="card-label" data-i18n="f2.k">Limits</p><h3 data-i18n="f2.t">Claude, Codex and Gemini, side by side</h3><p data-i18n="f2.d">View 5-hour, weekly and model-specific limits for all three providers in one place. When one nears its limit, a banner suggests switching to another with headroom.</p></article>
       <article><p class="card-label" data-i18n="f3.k">Throughput</p><h3 data-i18n="f3.t">Live tok/s across all local AI</h3><p data-i18n="f3.d">A real-time speed gauge and 1m / 2m / 5m chart combine concurrent output from Claude, Codex and Gemini, alongside today's tokens and API-equivalent cost.</p></article>
-      <article><p class="card-label" data-i18n="f4.k">Estimates</p><h3 data-i18n="f4.t">Updates between refreshes</h3><p data-i18n="f4.d">After calibration, new local tokens update Claude quota estimates in the panel and menu bar. The ≈ mark stays until the next API reading corrects the value.</p></article>
+      <article><p class="card-label" data-i18n="f4.k">Estimates</p><h3 data-i18n="f4.t">Updates between refreshes</h3><p data-i18n="f4.d">After calibration, new local tokens update Claude quota estimates in the panel and menu bar. The next API reading corrects the estimate.</p></article>
       <article id="history"><p class="card-label" data-i18n="f5.k">History</p><h3 data-i18n="f5.t">A usage history window</h3><p data-i18n="f5.d">Use Sessions and Stats in the panel for recent activity. Open History for stacked Claude, Codex and Gemini charts, project trends, models, daily totals and CSV export. Daily totals stay on your Mac after old logs are cleared.</p></article>
       <article><p class="card-label" data-i18n="f6.k">Alerts</p><h3 data-i18n="f6.t">Notifications, five languages</h3><p data-i18n="f6.d">90%, 100% and reset alerts default to on for Claude, Codex and Gemini, including Claude estimates. Choose 80%, 90% or 95% for the early alert. Requires macOS notification permission.</p></article>
     </div>

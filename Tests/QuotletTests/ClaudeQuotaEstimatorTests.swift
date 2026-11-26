@@ -31,6 +31,8 @@ final class ClaudeQuotaEstimatorTests: XCTestCase {
         XCTAssertEqual(result.session!.percent, 23, accuracy: 0.001)
         XCTAssertEqual(result.weekly!.percent, 40.75, accuracy: 0.001)
         XCTAssertTrue(result.session!.isEstimated)
+        XCTAssertEqual(result.session?.percentText, "23.0%")
+        XCTAssertEqual(result.weekly?.percentText, "40.8%")
         XCTAssertEqual(actual.session!.percent, 22)
         XCTAssertFalse(actual.session!.isEstimated)
     }
